@@ -1,17 +1,12 @@
 # services/analyzer.py
 #
-# The core AI analysis engine for CVOptimize.
+# AI analysis engine for CVOptimize.
 #
-# Given a job description and a resume's extracted text, this module:
-#   1. Extracts skills/requirements from the job description (spaCy NLP)
-#   2. Finds which skills appear verbatim in the resume (exact matching)
-#   3. Finds near-matches using AI sentence embeddings (semantic matching)
-#   4. Computes a fit score (0-100) and a fit badge (Low / Medium / Strong)
-#
-# WHY two matching passes?
-#   Exact matching catches "Python" → "Python".
-#   Semantic matching catches "JavaScript" → "JS", or "team leadership" → "led a team".
-#   Together they give a much more complete picture than either alone.
+# Pipeline:
+#   1. Extract skills from the job description (spaCy NLP)
+#   2. Exact match those skills against the resume
+#   3. Semantic match remaining skills using sentence embeddings
+#   4. Compute fit score + badge
 
 import re
 import spacy
@@ -20,136 +15,170 @@ from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 
 # ---------------------------------------------------------------------------
-# Model loading (lazy, module-level singletons)
+# Lazy model loading
 # ---------------------------------------------------------------------------
-# We load models once and reuse them across requests.
-# Loading takes ~2-5 seconds the first time a request hits this code.
-# After that, they stay in memory for the lifetime of the Flask process.
-
-_nlp = None          # spaCy NLP pipeline
-_embedder = None     # sentence-transformers model
-
+_nlp = None
+_embedder = None
 
 def _get_nlp():
     global _nlp
     if _nlp is None:
-        # en_core_web_sm: small English model, good for noun chunk extraction.
-        # Installed during setup: python -m spacy download en_core_web_sm
         _nlp = spacy.load("en_core_web_sm")
     return _nlp
-
 
 def _get_embedder():
     global _embedder
     if _embedder is None:
-        # all-MiniLM-L6-v2: small (80MB), fast, strong semantic understanding.
-        # Downloaded automatically by sentence-transformers on first use.
         _embedder = SentenceTransformer("all-MiniLM-L6-v2")
     return _embedder
 
 
 # ---------------------------------------------------------------------------
-# Step 1: Extract skills from the job description
+# Step 1: Skill extraction
 # ---------------------------------------------------------------------------
 
-# Words that appear in JDs but aren't skills (stop words for our domain).
-_SKILL_STOP_WORDS = {
-    "experience", "knowledge", "understanding", "ability", "skill", "skills",
-    "years", "year", "work", "working", "strong", "good", "excellent",
-    "proficient", "familiarity", "familiar", "background", "proven",
-    "demonstrated", "solid", "hands", "hands-on", "preferred", "required",
-    "plus", "bonus", "including", "such", "etc", "related", "relevant",
-    "minimum", "least", "must", "nice", "have", "using", "use",
-    # Common JD sentence starters / subjects that aren't skills
-    "we", "candidate", "candidates", "team", "company", "role", "position",
-    "job", "responsibilities", "requirements", "qualifications", "you",
-    "applicant", "applicants", "person", "individual",
+# Generic words that are never skills, no matter the context
+_STOP_WORDS = {
+    # Verbs / actions
+    "assist", "build", "collaborate", "contribute", "debug", "develop",
+    "gather", "help", "implement", "maintain", "participate", "resolve",
+    "write", "use", "using", "work", "working", "ensure", "support",
+    # Generic nouns
+    "ability", "background", "busywork", "candidate", "candidates",
+    "code", "company", "compensation", "defects", "end", "engineers",
+    "environment", "experience", "exposure", "familiarity", "features",
+    "field", "graduation", "guidance", "hands", "hourly", "individual",
+    "knowledge", "mentorship", "networking", "offer", "person",
+    "platforms", "potential", "proficiency", "qualifications",
+    "requirements", "responsibilities", "return", "role", "schedule",
+    "site", "skills", "solutions", "team", "time", "understanding",
+    "users", "willingness", "years", "year",
+    # Adjectives
+    "basic", "clean", "competitive", "cross-functional", "daily",
+    "documented", "excellent", "familiar", "full-time", "good",
+    "hands-on", "hybrid", "motivated", "nice", "paid", "preferred",
+    "prior", "proficient", "real", "related", "relevant", "remote",
+    "senior", "solid", "strong", "testable",
+    # Determiners / pronouns
+    "a", "an", "the", "that", "this", "we", "you", "our", "their",
+    "any", "all", "at", "least", "one", "or",
 }
 
-# Single uppercase tokens to exclude — typically abbreviations that aren't skills
-_SINGLE_TOKEN_BLOCKLIST = {"ci", "cd", "rest", "api", "ui", "ux", "qa", "ba"}
+# US state abbreviations
+_STATE_ABBREVS = {
+    "al","ak","az","ar","ca","co","ct","de","fl","ga","hi","id","il","in",
+    "ia","ks","ky","la","me","md","ma","mi","mn","ms","mo","mt","ne","nv",
+    "nh","nj","nm","ny","nc","nd","oh","ok","or","pa","ri","sc","sd","tn",
+    "tx","ut","vt","va","wa","wv","wi","wy","dc",
+}
+
+# spaCy entity labels that are never skills
+_NOISE_ENT_LABELS = {
+    "GPE", "LOC", "DATE", "TIME", "MONEY", "CARDINAL",
+    "PERCENT", "ORDINAL", "QUANTITY", "PERSON", "FAC", "NORP",
+}
+
+# spaCy entity labels that ARE skills (tools, companies, products)
+_SKILL_ENT_LABELS = {"ORG", "PRODUCT", "WORK_OF_ART"}
+
+
+def _normalize_jd(text: str) -> str:
+    """Add sentence-ending punctuation at each line so spaCy parses correctly."""
+    lines = []
+    for line in text.splitlines():
+        line = re.sub(r'^[\s•–—\-*·]+', '', line).strip()
+        if not line:
+            continue
+        if line[-1] not in '.!?':
+            line += '.'
+        lines.append(line)
+    return ' '.join(lines)
+
+
+def _is_skill_phrase(phrase: str) -> bool:
+    """Return True if this phrase is worth keeping as a skill candidate."""
+    words = phrase.split()
+
+    # Length: 1–3 words only
+    if not words or len(words) > 3:
+        return False
+
+    # Minimum length
+    if len(phrase) < 3:
+        return False
+
+    # No digits or currency characters
+    if any(ch.isdigit() or ch in '$%()' for ch in phrase):
+        return False
+
+    lower_words = [w.lower() for w in words]
+
+    # All words are stop words → not a skill
+    if all(w in _STOP_WORDS for w in lower_words):
+        return False
+
+    # Single word rules
+    if len(words) == 1:
+        w = words[0]
+        # Single lowercase word that's generic → skip
+        if w[0].islower() and w.lower() in _STOP_WORDS:
+            return False
+        # State abbreviation
+        if w.lower() in _STATE_ABBREVS:
+            return False
+        # Very generic lowercase single words (not proper nouns)
+        if w[0].islower() and len(w) <= 4 and not w.isupper():
+            return False
+
+    return True
 
 
 def extract_skills_from_jd(jd_text: str) -> list[str]:
     """
-    Extract candidate skills from a job description using spaCy NLP.
-
-    Strategy:
-      1. Run spaCy to get noun chunks (e.g., "machine learning", "REST APIs")
-         and named entities (e.g., "Python", "AWS", "Google Cloud").
-      2. Filter out phrases that are too long, too short, or are stop words.
-      3. Deduplicate (case-insensitive).
-
-    Returns a list of skill strings, e.g.:
-      ["Python", "REST APIs", "machine learning", "Docker", "AWS"]
+    Extract skills and requirements from a job description.
+    Returns a deduplicated, sorted list of skill strings.
     """
     nlp = _get_nlp()
-    doc = nlp(jd_text)
+    doc = nlp(_normalize_jd(jd_text))
 
-    candidates = set()
+    candidates: dict[str, str] = {}  # lowercase → original casing
 
-    # Noun chunks: multi-word phrases like "machine learning", "REST APIs"
-    for chunk in doc.noun_chunks:
-        skill = _clean_skill(chunk.text)
-        if _is_valid_skill(skill):
-            candidates.add(skill.lower())
-
-    # Named entities: proper nouns like "Python", "AWS", "React"
+    # Mark tokens that belong to noise entities
+    noise_token_ids = set()
     for ent in doc.ents:
-        skill = _clean_skill(ent.text)
-        if _is_valid_skill(skill):
-            candidates.add(skill.lower())
+        if ent.label_ in _NOISE_ENT_LABELS:
+            noise_token_ids.update(range(ent.start, ent.end))
 
-    # Also extract individual tokens that look like tech keywords:
-    # capitalized single words not at sentence start (e.g., "Docker", "SQL")
-    for token in doc:
-        if (
-            token.is_alpha
-            and len(token.text) >= 2
-            and not token.is_stop
-            and token.text[0].isupper()
-            and not token.is_sent_start
-            and token.text.lower() not in _SINGLE_TOKEN_BLOCKLIST
-        ):
-            skill = token.text.strip()
-            if _is_valid_skill(skill):
-                candidates.add(skill.lower())
+    # --- Named entities that ARE skills (ORG, PRODUCT, etc.) ---
+    for ent in doc.ents:
+        if ent.label_ in _SKILL_ENT_LABELS:
+            phrase = ent.text.strip()
+            if _is_skill_phrase(phrase):
+                candidates[phrase.lower()] = phrase
 
-    # Restore original casing: prefer the first form seen in the JD.
-    # Build a mapping: lowercase → original casing
-    casing_map = {}
-    for chunk in list(doc.noun_chunks) + list(doc.ents):
-        cleaned = _clean_skill(chunk.text)
-        key = cleaned.lower()
-        if key in candidates and key not in casing_map:
-            casing_map[key] = cleaned
-    for token in doc:
-        key = token.text.lower()
-        if key in candidates and key not in casing_map:
-            casing_map[key] = token.text
+    # --- Noun chunks ---
+    for chunk in doc.noun_chunks:
+        # Skip chunks overlapping with noise entities
+        if any(tok.i in noise_token_ids for tok in chunk):
+            continue
 
-    result = [casing_map.get(c, c) for c in candidates]
-    return sorted(result, key=str.lower)
+        phrase = chunk.text.strip()
+        # Strip leading determiners/articles
+        phrase = re.sub(r'^(a|an|the|our|your|their|any|one)\s+', '', phrase, flags=re.IGNORECASE).strip()
 
+        if _is_skill_phrase(phrase):
+            key = phrase.lower()
+            if key not in candidates:
+                candidates[key] = phrase
 
-def _clean_skill(text: str) -> str:
-    """Strip leading articles/determiners and extra whitespace."""
-    # Remove leading "a", "an", "the", "our", "your", "their"
-    text = re.sub(r"^(a|an|the|our|your|their)\s+", "", text.strip(), flags=re.IGNORECASE)
-    return text.strip()
+    # --- Also scan for slash-separated tech pairs like "HTML/CSS", "CI/CD" ---
+    for match in re.finditer(r'\b([A-Z][A-Za-z0-9]*)/([A-Z][A-Za-z0-9]*)\b', jd_text):
+        phrase = match.group(0)
+        key = phrase.lower()
+        if key not in candidates:
+            candidates[key] = phrase
 
-
-def _is_valid_skill(skill: str) -> bool:
-    """Return True if the string looks like a skill worth keeping."""
-    words = skill.split()
-    if len(words) == 0 or len(words) > 5:
-        return False                          # Too long to be a skill phrase
-    if len(skill) < 2:
-        return False                          # Single character
-    lower_words = {w.lower() for w in words}
-    if lower_words.issubset(_SKILL_STOP_WORDS):
-        return False                          # All words are noise words
-    return True
+    return sorted(candidates.values(), key=str.lower)
 
 
 # ---------------------------------------------------------------------------
@@ -158,39 +187,27 @@ def _is_valid_skill(skill: str) -> bool:
 
 def exact_match(resume_text: str, jd_skills: list[str]) -> tuple[list[str], list[str]]:
     """
-    Check which JD skills appear verbatim (case-insensitive) in the resume.
-
-    Returns:
-        matched:   skills found in the resume
-        missing:   skills NOT found (passed to semantic matching next)
+    Case-insensitive word-boundary search for each skill in the resume.
+    Returns (matched, unmatched).
     """
     resume_lower = resume_text.lower()
-    matched = []
-    missing = []
+    matched, unmatched = [], []
 
     for skill in jd_skills:
-        # Use word-boundary-aware search so "R" doesn't match inside "React"
         pattern = re.compile(r'\b' + re.escape(skill.lower()) + r'\b')
         if pattern.search(resume_lower):
             matched.append(skill)
         else:
-            missing.append(skill)
+            unmatched.append(skill)
 
-    return matched, missing
+    return matched, unmatched
 
 
 # ---------------------------------------------------------------------------
 # Step 3: Semantic matching
 # ---------------------------------------------------------------------------
 
-# Similarity threshold: pairs above this are considered a match.
-# 0.55 is permissive enough to catch paraphrases without too many false positives.
-SEMANTIC_THRESHOLD = 0.55
-
-# We split the resume into overlapping chunks for embedding.
-# Embedding the whole resume as one string loses granularity.
-_CHUNK_SIZE = 100   # words per chunk
-_CHUNK_OVERLAP = 20 # overlap between chunks
+SEMANTIC_THRESHOLD = 0.45   # lower = more matches; raise if too many false positives
 
 
 def semantic_match(
@@ -199,49 +216,38 @@ def semantic_match(
     threshold: float = SEMANTIC_THRESHOLD,
 ) -> list[dict]:
     """
-    Use sentence embeddings to find skills that are present in the resume
-    but weren't caught by exact matching.
+    Compare unmatched JD skills against individual resume sentences using
+    sentence embeddings.
 
-    For each unmatched skill, we compare its embedding to embeddings of
-    resume text chunks. If any chunk is similar enough, it's a match.
+    Using sentences (not 100-word chunks) gives much sharper similarity
+    scores because each sentence covers a focused topic.
 
-    Returns a list of dicts:
-      [{"jd_skill": "JavaScript", "resume_match": "JS", "similarity": 0.72}, ...]
+    Returns:
+      [{"jd_skill": "version control", "resume_match": "...", "similarity": 0.61}, ...]
     """
     if not unmatched_skills:
         return []
 
-    embedder = _get_embedder()
+    # Split resume into sentences using spaCy
+    nlp = _get_nlp()
+    doc = nlp(resume_text)
+    sentences = [sent.text.strip() for sent in doc.sents if len(sent.text.strip()) > 10]
 
-    # --- Chunk the resume ---
-    words = resume_text.split()
-    chunks = []
-    for i in range(0, len(words), _CHUNK_SIZE - _CHUNK_OVERLAP):
-        chunk = " ".join(words[i : i + _CHUNK_SIZE])
-        if chunk.strip():
-            chunks.append(chunk)
-    if not chunks:
+    if not sentences:
         return []
 
-    # --- Embed everything ---
-    # encode() converts text to a dense vector (list of floats).
-    # We embed all chunks and all skills in two batch calls (efficient).
-    skill_embeddings = embedder.encode(unmatched_skills)        # shape: (n_skills, dim)
-    chunk_embeddings = embedder.encode(chunks)                  # shape: (n_chunks, dim)
+    embedder = _get_embedder()
+    skill_embs = embedder.encode(unmatched_skills)
+    sent_embs = embedder.encode(sentences)
 
-    # cosine_similarity returns a matrix: rows = skills, cols = chunks
-    sim_matrix = cosine_similarity(skill_embeddings, chunk_embeddings)
+    sim_matrix = cosine_similarity(skill_embs, sent_embs)  # (n_skills, n_sents)
 
     results = []
-    for skill_idx, skill in enumerate(unmatched_skills):
-        # Best matching chunk for this skill
-        best_chunk_idx = int(np.argmax(sim_matrix[skill_idx]))
-        best_score = float(sim_matrix[skill_idx][best_chunk_idx])
-
+    for i, skill in enumerate(unmatched_skills):
+        best_j = int(np.argmax(sim_matrix[i]))
+        best_score = float(sim_matrix[i][best_j])
         if best_score >= threshold:
-            # Extract a short snippet from the best chunk for display
-            best_chunk_words = chunks[best_chunk_idx].split()
-            snippet = " ".join(best_chunk_words[:8]) + ("..." if len(best_chunk_words) > 8 else "")
+            snippet = sentences[best_j][:80] + ('…' if len(sentences[best_j]) > 80 else '')
             results.append({
                 "jd_skill": skill,
                 "resume_match": snippet,
@@ -255,29 +261,14 @@ def semantic_match(
 # Step 4: Scoring
 # ---------------------------------------------------------------------------
 
-def compute_fit_score(
-    total_skills: int,
-    matched_count: int,
-    semantic_count: int,
-) -> int | None:
-    """
-    Compute an overall fit percentage.
-
-    Exact matches are worth full credit.
-    Semantic matches are worth 70% credit (they're approximate).
-
-    Returns None if there were no skills detected (can't score).
-    """
-    if total_skills == 0:
+def compute_fit_score(total: int, matched: int, semantic: int) -> int | None:
+    if total == 0:
         return None
-
-    weighted = matched_count + (semantic_count * 0.7)
-    score = round((weighted / total_skills) * 100)
-    return min(score, 100)   # Cap at 100%
+    weighted = matched + (semantic * 0.7)
+    return min(round((weighted / total) * 100), 100)
 
 
 def compute_fit_badge(score: int | None) -> str | None:
-    """Return 'Low', 'Medium', or 'Strong' based on the score."""
     if score is None:
         return None
     if score >= 70:
@@ -288,29 +279,16 @@ def compute_fit_badge(score: int | None) -> str | None:
 
 
 # ---------------------------------------------------------------------------
-# Top-level: run the full analysis pipeline
+# Top-level pipeline
 # ---------------------------------------------------------------------------
 
 def run_analysis(resume_text: str, jd_text: str) -> dict:
-    """
-    Run the full analysis pipeline and return a result dict.
-
-    This is what the route calls — it wires together all the steps above.
-    """
-    # Step 1: extract skills from JD
     jd_skills = extract_skills_from_jd(jd_text)
+    matched, unmatched = exact_match(resume_text, jd_skills)
+    semantic = semantic_match(resume_text, unmatched)
+    semantic_names = {s["jd_skill"] for s in semantic}
+    truly_missing = [s for s in unmatched if s not in semantic_names]
 
-    # Step 2: exact match
-    matched, missing = exact_match(resume_text, jd_skills)
-
-    # Step 3: semantic match on what's still missing
-    semantic = semantic_match(resume_text, missing)
-    semantic_skill_names = [s["jd_skill"] for s in semantic]
-
-    # Skills that are truly missing (not found by either method)
-    truly_missing = [s for s in missing if s not in semantic_skill_names]
-
-    # Step 4: score
     fit_score = compute_fit_score(len(jd_skills), len(matched), len(semantic))
     fit_badge = compute_fit_badge(fit_score)
 
