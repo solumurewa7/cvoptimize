@@ -78,8 +78,10 @@ def create_app(config_name: str = None) -> Flask:
     # By the time these lines run, the app + db are already set up.
     from .routes.auth import auth_bp
     from .routes.resume import resume_bp
+    from .routes.analysis import analysis_bp
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(resume_bp, url_prefix="/api/resumes")
+    app.register_blueprint(analysis_bp, url_prefix="/api/analyses")
 
     # Health check route — used to verify the server is running.
     # Render and other platforms ping this to check if your app is alive.
