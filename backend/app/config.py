@@ -9,12 +9,14 @@
 # based on an environment variable called FLASK_ENV.
 
 import os
+from pathlib import Path
 from datetime import timedelta
 from dotenv import load_dotenv
 
-# load_dotenv() reads the .env file and loads those values into
-# os.environ, so os.environ.get("SECRET_KEY") works.
-load_dotenv()
+# Load .env from the backend/ directory (one level above this file's app/ folder).
+# Using an absolute path means this works regardless of which directory
+# the server is started from.
+load_dotenv(Path(__file__).parent.parent / ".env", override=True)
 
 
 class Config:
