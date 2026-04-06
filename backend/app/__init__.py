@@ -62,6 +62,13 @@ def create_app(config_name: str = None) -> Flask:
          supports_credentials=True,
          allow_headers=["Content-Type", "X-CSRF-TOKEN"])
 
+    # --- Import models ---
+    # We import models INSIDE create_app() to avoid circular imports.
+    # This import makes SQLAlchemy and Flask-Migrate aware of all three tables.
+    # Without this line, `flask db migrate` would generate an empty migration
+    # because it wouldn't know the User, Resume, and Analysis models exist.
+    from . import models  # noqa: F401
+
     # --- Register Blueprints ---
     # A "Blueprint" is a group of related routes.
     # We split routes into separate files (auth.py, resume.py, analysis.py)
