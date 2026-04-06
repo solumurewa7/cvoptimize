@@ -70,8 +70,10 @@ class Config:
 class DevelopmentConfig(Config):
     """Settings for running on your laptop."""
     DEBUG = True
-    # In dev, show all SQL queries Flask runs — helpful for learning
     SQLALCHEMY_ECHO = False
+    # CSRF is a browser-only attack vector — disable in dev so curl/Postman work.
+    # Production keeps it enabled via the base Config.
+    JWT_COOKIE_CSRF_PROTECT = False
 
 
 class ProductionConfig(Config):
