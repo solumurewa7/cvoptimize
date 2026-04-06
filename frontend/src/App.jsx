@@ -1,30 +1,84 @@
-// App.jsx
+// App.jsx — Router + auth gate
 //
-// This is the ROOT of the entire React application.
-// Every page, component, and piece of UI eventually lives inside here.
-//
-// Right now it's a simple placeholder that confirms the setup works.
-// In Phase 9 we'll replace this with React Router for navigation between pages.
+// HOW ROUTING WORKS:
+//   BrowserRouter watches the URL and renders the matching <Route>.
+//   ProtectedRoute checks if the user is logged in before showing a page.
+//   If not logged in → redirect to /login.
 
-function App() {
-  return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      minHeight: '100vh',
-      fontFamily: 'sans-serif',
-    }}>
-      {/* CVOptimize wordmark */}
-      <h1 style={{ color: '#3b82f6', fontSize: '2.5rem', margin: '0 0 8px' }}>
-        CVOptimize
-      </h1>
-      <p style={{ color: '#94a3b8', fontSize: '1rem' }}>
-        Frontend is running. Phase 1 complete.
-      </p>
-    </div>
-  )
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { Toaster } from 'react-hot-toast'
+import { AuthProvider, useAuth } from './context/AuthContext'
+import LoginPage from './pages/LoginPage'
+import RegisterPage from './pages/RegisterPage'
+import DashboardPage from './pages/DashboardPage'
+
+// ProtectedRoute: renders children only if logged in, else redirects to /login.
+function ProtectedRoute({ children }) {
+  const { user, loading } = useAuth()
+
+  if (loading) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'var(--navy-950)',
+        color: 'var(--text-secondary)',
+      }}>
+        Loading…
+      </div>
+    )
+  }
+
+  // user === false means "checked and not logged in"
+  if (!user) return <Navigate to="/login" replace />
+  return children
 }
 
-export default App
+// PublicRoute: if already logged in, skip login/register and go to dashboard.
+function PublicRoute({ children }) {
+  const { user, loading } = useAuth()
+  if (loading) return null
+  if (user) return <Navigate to="/dashboard" replace />
+  return children
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <BrowserRouter>
+        {/* react-hot-toast notification container */}
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            style: {
+              background: 'var(--navy-800)',
+              color: 'var(--text-primary)',
+              border: '1px solid var(--navy-700)',
+            },
+          }}
+        />
+
+        <Routes>
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+
+          <Route path="/login" element={
+            <PublicRoute><LoginPage /></PublicRoute>
+          } />
+
+          <Route path="/register" element={
+            <PublicRoute><RegisterPage /></PublicRoute>
+          } />
+
+          <Route path="/dashboard" element={
+            <ProtectedRoute><DashboardPage /></ProtectedRoute>
+          } />
+
+          {/* Catch-all — unknown URLs go to dashboard (which may redirect to login) */}
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
+  )
+}
