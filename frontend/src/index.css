@@ -1,0 +1,95 @@
+/*
+  index.css — Global styles for CVOptimize
+
+  Tailwind v4 is activated by this single @import line.
+  It scans your components automatically and generates only the CSS you use.
+*/
+@import "tailwindcss";
+
+/*
+  CSS Custom Properties (variables) for CVOptimize's color system.
+  We define the dark navy palette here so it's available everywhere.
+
+  The user will finalize the exact blue shade with a screenshot —
+  these are placeholder values we'll update in Phase 11.
+
+  --navy-*: our primary dark navy blues
+  --accent-*: a brighter blue for interactive elements (buttons, links)
+*/
+:root {
+  --navy-950: #0a1628;   /* Darkest — page background */
+  --navy-900: #0d1f3c;   /* Main surfaces */
+  --navy-800: #112a4f;   /* Card backgrounds */
+  --navy-700: #1a3a6b;   /* Borders, dividers */
+  --navy-600: #1e4a8a;   /* Subtle highlights */
+  --accent:   #3b82f6;   /* Bright blue — buttons, links, active states */
+  --accent-hover: #2563eb;
+  --text-primary: #f1f5f9;     /* White-ish — main text */
+  --text-secondary: #94a3b8;   /* Muted grey-blue — secondary text */
+  --success: #22c55e;          /* Matched skills (green) */
+  --warning: #f59e0b;          /* Medium score (amber) */
+  --danger:  #ef4444;          /* Low score / missing skills (red) */
+}
+
+/*
+  Base reset — removes browser default spacing and sets the dark background.
+  Every page in the app inherits this dark navy look.
+*/
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  /* Smooth scrolling when navigating to anchors on the same page */
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background-color: var(--navy-950);
+  color: var(--text-primary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  /* antialiased: makes text look crisp on screens instead of blurry/bold */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.6;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/*
+  Remove default list styling — we'll style lists manually per-component
+*/
+ul, ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/*
+  Make images responsive by default — they never overflow their container
+*/
+img {
+  max-width: 100%;
+  display: block;
+}
+
+/*
+  Scrollbar styling — dark to match our theme.
+  These webkit rules work in Chrome and Edge (most users).
+*/
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--navy-900);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--navy-700);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--navy-600);
+}
