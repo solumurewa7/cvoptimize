@@ -395,7 +395,8 @@ function ResumeCard({ resume, delay, onUse, onDelete }) {
   const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
 
   function openPreview() {
-    window.open(`/api/resumes/${resume.id}/file`, '_blank', 'noopener,noreferrer')
+    const base = import.meta.env.VITE_API_URL || ''
+    window.open(`${base}/api/resumes/${resume.id}/file`, '_blank', 'noopener,noreferrer')
   }
 
   return (

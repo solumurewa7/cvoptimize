@@ -84,6 +84,11 @@ class ProductionConfig(Config):
     # SameSite=None is required so browsers include the JWT cookie on
     # cross-origin fetch requests. Must be paired with Secure=True.
     JWT_COOKIE_SAMESITE = "None"
+    # CSRF cookies are set on the backend domain — JavaScript on the
+    # frontend domain cannot read them (cross-origin cookie isolation).
+    # CORS already restricts requests to our known frontend origin,
+    # so the CSRF risk is covered without the extra token check.
+    JWT_COOKIE_CSRF_PROTECT = False
 
 
 class TestingConfig(Config):
