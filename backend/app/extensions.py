@@ -11,6 +11,8 @@
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_jwt_extended import JWTManager
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 # SQLAlchemy: our database ORM (Object-Relational Mapper).
 # "ORM" means we write Python classes instead of raw SQL.
@@ -27,3 +29,8 @@ migrate = Migrate()
 # A JWT is a signed string that proves "this request came from user X".
 # We store it in an httpOnly cookie so JavaScript can't steal it.
 jwt = JWTManager()
+
+# Rate limiter — in-memory storage (fine for single-process deployments).
+# key_func=get_remote_address means limits are tracked per client IP by default;
+# individual routes can override this with their own key_func.
+limiter = Limiter(key_func=get_remote_address, default_limits=[], storage_uri="memory://")

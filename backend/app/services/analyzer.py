@@ -1,276 +1,46 @@
 # services/analyzer.py
 #
-# AI analysis engine for CVOptimize.
+# AI analysis engine — powered by Google Gemini Flash.
 #
 # Pipeline:
-#   1. Extract skills from the job description (spaCy NLP)
-#   2. Exact match those skills against the resume
-#   3. Semantic match remaining skills using sentence embeddings
-#   4. Compute fit score + badge
+#   1. Send the full resume text + full job description to Gemini Flash
+#   2. Gemini reads both documents holistically and returns structured JSON:
+#       - fit_score  (0-100)
+#       - strengths  (up to 10 specific bullet strings referencing the resume)
+#       - gaps       (up to 10 specific bullet strings referencing the JD)
+#       - matched_skills  (concise skill tag strings present in the resume)
+#       - missing_skills  (concise skill tag strings absent from the resume)
+#   3. We derive fit_badge from the score and return the full result dict.
 
+import os
+import json
 import re
-import spacy
-from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
-import numpy as np
+
+from google import genai
 
 # ---------------------------------------------------------------------------
-# Lazy model loading
+# Lazy client loading
 # ---------------------------------------------------------------------------
-_nlp = None
-_embedder = None
+_client = None
 
-def _get_nlp():
-    global _nlp
-    if _nlp is None:
-        _nlp = spacy.load("en_core_web_sm")
-    return _nlp
 
-def _get_embedder():
-    global _embedder
-    if _embedder is None:
-        _embedder = SentenceTransformer("all-MiniLM-L6-v2")
-    return _embedder
+def _get_client():
+    global _client
+    if _client is None:
+        api_key = os.environ.get("GEMINI_API_KEY")
+        if not api_key:
+            raise EnvironmentError(
+                "GEMINI_API_KEY is not set. Add it to backend/.env and restart Flask."
+            )
+        _client = genai.Client(api_key=api_key)
+    return _client
 
 
 # ---------------------------------------------------------------------------
-# Step 1: Skill extraction
+# Badge helper
 # ---------------------------------------------------------------------------
 
-# Generic words that are never skills, no matter the context
-_STOP_WORDS = {
-    # Verbs / actions
-    "assist", "build", "collaborate", "contribute", "debug", "develop",
-    "gather", "help", "implement", "maintain", "participate", "resolve",
-    "write", "use", "using", "work", "working", "ensure", "support",
-    # Generic nouns
-    "ability", "background", "busywork", "candidate", "candidates",
-    "code", "company", "compensation", "defects", "end", "engineers",
-    "environment", "experience", "exposure", "familiarity", "features",
-    "field", "graduation", "guidance", "hands", "hourly", "individual",
-    "knowledge", "mentorship", "networking", "offer", "person",
-    "platforms", "potential", "proficiency", "qualifications",
-    "requirements", "responsibilities", "return", "role", "schedule",
-    "site", "skills", "solutions", "team", "time", "understanding",
-    "users", "willingness", "years", "year",
-    # Adjectives
-    "basic", "clean", "competitive", "cross-functional", "daily",
-    "documented", "excellent", "familiar", "full-time", "good",
-    "hands-on", "hybrid", "motivated", "nice", "paid", "preferred",
-    "prior", "proficient", "real", "related", "relevant", "remote",
-    "senior", "solid", "strong", "testable",
-    # Determiners / pronouns
-    "a", "an", "the", "that", "this", "we", "you", "our", "their",
-    "any", "all", "at", "least", "one", "or",
-}
-
-# US state abbreviations
-_STATE_ABBREVS = {
-    "al","ak","az","ar","ca","co","ct","de","fl","ga","hi","id","il","in",
-    "ia","ks","ky","la","me","md","ma","mi","mn","ms","mo","mt","ne","nv",
-    "nh","nj","nm","ny","nc","nd","oh","ok","or","pa","ri","sc","sd","tn",
-    "tx","ut","vt","va","wa","wv","wi","wy","dc",
-}
-
-# spaCy entity labels that are never skills
-_NOISE_ENT_LABELS = {
-    "GPE", "LOC", "DATE", "TIME", "MONEY", "CARDINAL",
-    "PERCENT", "ORDINAL", "QUANTITY", "PERSON", "FAC", "NORP",
-}
-
-# spaCy entity labels that ARE skills (tools, companies, products)
-_SKILL_ENT_LABELS = {"ORG", "PRODUCT", "WORK_OF_ART"}
-
-
-def _normalize_jd(text: str) -> str:
-    """Add sentence-ending punctuation at each line so spaCy parses correctly."""
-    lines = []
-    for line in text.splitlines():
-        line = re.sub(r'^[\s•–—\-*·]+', '', line).strip()
-        if not line:
-            continue
-        if line[-1] not in '.!?':
-            line += '.'
-        lines.append(line)
-    return ' '.join(lines)
-
-
-def _is_skill_phrase(phrase: str) -> bool:
-    """Return True if this phrase is worth keeping as a skill candidate."""
-    words = phrase.split()
-
-    # Length: 1–3 words only
-    if not words or len(words) > 3:
-        return False
-
-    # Minimum length
-    if len(phrase) < 3:
-        return False
-
-    # No digits or currency characters
-    if any(ch.isdigit() or ch in '$%()' for ch in phrase):
-        return False
-
-    lower_words = [w.lower() for w in words]
-
-    # All words are stop words → not a skill
-    if all(w in _STOP_WORDS for w in lower_words):
-        return False
-
-    # Single word rules
-    if len(words) == 1:
-        w = words[0]
-        # Single lowercase word that's generic → skip
-        if w[0].islower() and w.lower() in _STOP_WORDS:
-            return False
-        # State abbreviation
-        if w.lower() in _STATE_ABBREVS:
-            return False
-        # Very generic lowercase single words (not proper nouns)
-        if w[0].islower() and len(w) <= 4 and not w.isupper():
-            return False
-
-    return True
-
-
-def extract_skills_from_jd(jd_text: str) -> list[str]:
-    """
-    Extract skills and requirements from a job description.
-    Returns a deduplicated, sorted list of skill strings.
-    """
-    nlp = _get_nlp()
-    doc = nlp(_normalize_jd(jd_text))
-
-    candidates: dict[str, str] = {}  # lowercase → original casing
-
-    # Mark tokens that belong to noise entities
-    noise_token_ids = set()
-    for ent in doc.ents:
-        if ent.label_ in _NOISE_ENT_LABELS:
-            noise_token_ids.update(range(ent.start, ent.end))
-
-    # --- Named entities that ARE skills (ORG, PRODUCT, etc.) ---
-    for ent in doc.ents:
-        if ent.label_ in _SKILL_ENT_LABELS:
-            phrase = ent.text.strip()
-            if _is_skill_phrase(phrase):
-                candidates[phrase.lower()] = phrase
-
-    # --- Noun chunks ---
-    for chunk in doc.noun_chunks:
-        # Skip chunks overlapping with noise entities
-        if any(tok.i in noise_token_ids for tok in chunk):
-            continue
-
-        phrase = chunk.text.strip()
-        # Strip leading determiners/articles
-        phrase = re.sub(r'^(a|an|the|our|your|their|any|one)\s+', '', phrase, flags=re.IGNORECASE).strip()
-
-        if _is_skill_phrase(phrase):
-            key = phrase.lower()
-            if key not in candidates:
-                candidates[key] = phrase
-
-    # --- Also scan for slash-separated tech pairs like "HTML/CSS", "CI/CD" ---
-    for match in re.finditer(r'\b([A-Z][A-Za-z0-9]*)/([A-Z][A-Za-z0-9]*)\b', jd_text):
-        phrase = match.group(0)
-        key = phrase.lower()
-        if key not in candidates:
-            candidates[key] = phrase
-
-    return sorted(candidates.values(), key=str.lower)
-
-
-# ---------------------------------------------------------------------------
-# Step 2: Exact matching
-# ---------------------------------------------------------------------------
-
-def exact_match(resume_text: str, jd_skills: list[str]) -> tuple[list[str], list[str]]:
-    """
-    Case-insensitive word-boundary search for each skill in the resume.
-    Returns (matched, unmatched).
-    """
-    resume_lower = resume_text.lower()
-    matched, unmatched = [], []
-
-    for skill in jd_skills:
-        pattern = re.compile(r'\b' + re.escape(skill.lower()) + r'\b')
-        if pattern.search(resume_lower):
-            matched.append(skill)
-        else:
-            unmatched.append(skill)
-
-    return matched, unmatched
-
-
-# ---------------------------------------------------------------------------
-# Step 3: Semantic matching
-# ---------------------------------------------------------------------------
-
-SEMANTIC_THRESHOLD = 0.45   # lower = more matches; raise if too many false positives
-
-
-def semantic_match(
-    resume_text: str,
-    unmatched_skills: list[str],
-    threshold: float = SEMANTIC_THRESHOLD,
-) -> list[dict]:
-    """
-    Compare unmatched JD skills against individual resume sentences using
-    sentence embeddings.
-
-    Using sentences (not 100-word chunks) gives much sharper similarity
-    scores because each sentence covers a focused topic.
-
-    Returns:
-      [{"jd_skill": "version control", "resume_match": "...", "similarity": 0.61}, ...]
-    """
-    if not unmatched_skills:
-        return []
-
-    # Split resume into sentences using spaCy
-    nlp = _get_nlp()
-    doc = nlp(resume_text)
-    sentences = [sent.text.strip() for sent in doc.sents if len(sent.text.strip()) > 10]
-
-    if not sentences:
-        return []
-
-    embedder = _get_embedder()
-    skill_embs = embedder.encode(unmatched_skills)
-    sent_embs = embedder.encode(sentences)
-
-    sim_matrix = cosine_similarity(skill_embs, sent_embs)  # (n_skills, n_sents)
-
-    results = []
-    for i, skill in enumerate(unmatched_skills):
-        best_j = int(np.argmax(sim_matrix[i]))
-        best_score = float(sim_matrix[i][best_j])
-        if best_score >= threshold:
-            snippet = sentences[best_j][:80] + ('…' if len(sentences[best_j]) > 80 else '')
-            results.append({
-                "jd_skill": skill,
-                "resume_match": snippet,
-                "similarity": round(best_score, 3),
-            })
-
-    return results
-
-
-# ---------------------------------------------------------------------------
-# Step 4: Scoring
-# ---------------------------------------------------------------------------
-
-def compute_fit_score(total: int, matched: int, semantic: int) -> int | None:
-    if total == 0:
-        return None
-    weighted = matched + (semantic * 0.7)
-    return min(round((weighted / total) * 100), 100)
-
-
-def compute_fit_badge(score: int | None) -> str | None:
-    if score is None:
-        return None
+def _badge(score: int) -> str:
     if score >= 70:
         return "Strong"
     if score >= 40:
@@ -279,25 +49,133 @@ def compute_fit_badge(score: int | None) -> str | None:
 
 
 # ---------------------------------------------------------------------------
-# Top-level pipeline
+# Gemini prompt
+# ---------------------------------------------------------------------------
+
+_PROMPT_TEMPLATE = """
+You are an expert recruiter and career coach. Your job is to evaluate how well a candidate's resume matches a specific job description.
+
+Read the following two documents carefully and completely — do not skim.
+
+=== JOB DESCRIPTION ===
+{jd_text}
+
+=== RESUME ===
+{resume_text}
+
+=== TASK ===
+Analyse the match between this resume and job description. Consider:
+- Explicit technical skills mentioned in the JD
+- Implied skills and experience that the role needs (even if not stated as hard requirements)
+- Relevant work experience, projects, and education
+- Soft skills, teamwork, communication if mentioned in the JD
+- Experience level (junior/mid/senior) and whether the candidate fits
+- DO NOT penalise for skills that are implied or demonstrated indirectly in the resume
+
+Scoring guide:
+- 90-100: Near-perfect fit. Candidate has almost everything required.
+- 70-89:  Strong fit. Candidate has most key requirements with minor gaps.
+- 40-69:  Partial fit. Candidate has some relevant experience but notable gaps.
+- 0-39:   Poor fit. Significant missing requirements.
+
+Return ONLY a valid JSON object — no markdown, no explanation, no extra text. The JSON must have exactly these keys:
+
+{{
+  "fit_score": <integer 0-100>,
+  "job_title": "<Short job title extracted or inferred from the JD, e.g. 'Senior Software Engineer', 'Marketing Manager'. Even if not stated explicitly, infer a reasonable title. Max 60 characters.>",
+  "strengths": [
+    "<Specific bullet. Reference actual resume content AND the JD requirement it satisfies. Max 2 sentences.>",
+    "...(up to 10 total)"
+  ],
+  "gaps": [
+    "<Specific bullet. Name the exact JD requirement and explain why the resume does not satisfy it. Max 2 sentences.>",
+    "...(up to 10 total)"
+  ],
+  "matched_skills": ["<concise skill name>", "..."],
+  "missing_skills": ["<concise skill name>", "..."]
+}}
+
+Rules:
+- strengths and gaps must each be plain strings — not objects.
+- matched_skills and missing_skills must be short (1-4 words each), suitable for UI chip labels.
+- Do not repeat the same point in both strengths and gaps.
+- Be honest and precise. A 90+ score should be rare and truly deserved.
+- Limit strengths to a maximum of 10 items. Limit gaps to a maximum of 10 items.
+- Return ONLY the JSON object. No other text.
+"""
+
+
+# ---------------------------------------------------------------------------
+# Main pipeline
 # ---------------------------------------------------------------------------
 
 def run_analysis(resume_text: str, jd_text: str) -> dict:
-    jd_skills = extract_skills_from_jd(jd_text)
-    matched, unmatched = exact_match(resume_text, jd_skills)
-    semantic = semantic_match(resume_text, unmatched)
-    semantic_names = {s["jd_skill"] for s in semantic}
-    truly_missing = [s for s in unmatched if s not in semantic_names]
+    """
+    Send the resume + JD to Gemini Flash and return a structured analysis dict.
 
-    fit_score = compute_fit_score(len(jd_skills), len(matched), len(semantic))
-    fit_badge = compute_fit_badge(fit_score)
+    Returns:
+        {
+            "fit_score": int,
+            "fit_badge": str,
+            "strengths": list[str],
+            "gaps": list[str],
+            "matched_skills": list[str],
+            "missing_skills": list[str],
+            "jd_snippet": str,
+            # Legacy keys (empty) kept so existing route code doesn't break
+            "extracted_jd_skills": [],
+            "semantic_matches": [],
+        }
+    """
+    client = _get_client()
+
+    prompt = _PROMPT_TEMPLATE.format(
+        jd_text=jd_text.strip(),
+        resume_text=resume_text.strip(),
+    )
+
+    try:
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+        )
+        raw = response.text.strip()
+    except Exception as e:
+        raise RuntimeError(f"Gemini API call failed: {e}") from e
+
+    # Strip any accidental markdown code fences Gemini sometimes adds
+    raw = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.MULTILINE)
+    raw = re.sub(r"\s*```$", "", raw, flags=re.MULTILINE)
+    raw = raw.strip()
+
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise RuntimeError(
+            f"Gemini returned non-JSON output. Raw response:\n{raw[:500]}"
+        ) from e
+
+    # Validate and coerce fields
+    score = int(data.get("fit_score", 0))
+    score = max(0, min(100, score))  # clamp to [0, 100]
+
+    job_title = str(data.get("job_title", "")).strip()[:60] or None
+
+    strengths = [str(s) for s in data.get("strengths", [])[:10]]
+    gaps      = [str(g) for g in data.get("gaps", [])[:10]]
+    matched   = [str(s) for s in data.get("matched_skills", [])]
+    missing   = [str(s) for s in data.get("missing_skills", [])]
 
     return {
-        "extracted_jd_skills": jd_skills,
-        "matched_skills": matched,
-        "missing_skills": truly_missing,
-        "semantic_matches": semantic,
-        "fit_score": fit_score,
-        "fit_badge": fit_badge,
-        "jd_snippet": jd_text[:150].strip(),
+        "fit_score":           score,
+        "fit_badge":           _badge(score),
+        "job_title":           job_title,
+        "strengths":           strengths,
+        "gaps":                gaps,
+        "matched_skills":      matched,
+        "missing_skills":      missing,
+        "jd_snippet":          jd_text[:150].strip(),
+        # Legacy keys — kept empty so route code that references them still works
+        "extracted_jd_skills": [],
+        "semantic_matches":    [],
     }

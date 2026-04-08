@@ -62,6 +62,11 @@ class Resume(db.Model):
     # "pdf" or "docx" — tells us which parser was used.
     file_type = db.Column(db.String(10), nullable=False)
 
+    # Raw file bytes — stored so users can preview/download their original file.
+    # nullable=True so existing resumes (uploaded before this column was added)
+    # still work; we just won't offer a preview button for those.
+    file_data = db.Column(db.LargeBinary, nullable=True)
+
     created_at = db.Column(
         db.DateTime(timezone=True),
         nullable=False,
@@ -84,6 +89,7 @@ class Resume(db.Model):
             "word_count": self.word_count,
             "improvement_findings": self.improvement_findings,
             "created_at": self.created_at.isoformat(),
+            "has_file": self.file_data is not None,
         }
         if include_text:
             result["extracted_text"] = self.extracted_text

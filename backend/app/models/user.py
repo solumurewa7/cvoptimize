@@ -16,7 +16,9 @@
 # but for Python/PostgreSQL.
 
 import uuid
-from datetime import datetime, timezone
+import secrets
+import hashlib
+from datetime import datetime, timezone, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from ..extensions import db
@@ -79,6 +81,14 @@ class User(db.Model):
         default=lambda: datetime.now(timezone.utc),
     )
 
+    # Password reset token — set when user requests a reset, cleared after use.
+    reset_token = db.Column(db.String(64), nullable=True, index=True)
+    reset_token_expires = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    # Email verification token — set on register, cleared once user clicks the link.
+    verification_token = db.Column(db.String(64), nullable=True, index=True)
+    verification_token_expires = db.Column(db.DateTime(timezone=True), nullable=True)
+
     # --- Relationships ---
     # This tells SQLAlchemy that one User can have MANY Resumes.
     # It's not a database column — it's a Python convenience that lets
@@ -119,14 +129,50 @@ class User(db.Model):
         # It's safe against timing attacks.
         return check_password_hash(self.password_hash, password)
 
+    def set_reset_token(self) -> str:
+        """Generate a secure reset token, store it, and return it."""
+        token = secrets.token_urlsafe(32)
+        self.reset_token = token
+        self.reset_token_expires = datetime.now(timezone.utc) + timedelta(minutes=30)
+        return token
+
+    def clear_reset_token(self) -> None:
+        """Invalidate the reset token after use."""
+        self.reset_token = None
+        self.reset_token_expires = None
+
+    def reset_token_valid(self) -> bool:
+        """Return True if the token exists and hasn't expired."""
+        if not self.reset_token or not self.reset_token_expires:
+            return False
+        return datetime.now(timezone.utc) < self.reset_token_expires
+
+    def set_verification_token(self) -> str:
+        """Generate a 24-hour email verification token and store it."""
+        token = secrets.token_urlsafe(32)
+        self.verification_token = token
+        self.verification_token_expires = datetime.now(timezone.utc) + timedelta(hours=24)
+        return token
+
+    def clear_verification_token(self) -> None:
+        self.verification_token = None
+        self.verification_token_expires = None
+
+    def verification_token_valid(self) -> bool:
+        if not self.verification_token or not self.verification_token_expires:
+            return False
+        return datetime.now(timezone.utc) < self.verification_token_expires
+
     def to_dict(self) -> dict:
         """Return a safe dictionary representation (no password hash!)."""
+        email_hash = hashlib.md5(self.email.strip().lower().encode()).hexdigest()
         return {
             "id": str(self.id),
             "email": self.email,
             "full_name": self.full_name,
             "is_verified": self.is_verified,
             "created_at": self.created_at.isoformat(),
+            "gravatar_url": f"https://www.gravatar.com/avatar/{email_hash}?s=80&d=identicon",
         }
 
     def __repr__(self) -> str:

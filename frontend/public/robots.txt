@@ -1,0 +1,14 @@
+User-agent: *
+Allow: /
+Allow: /analyze
+Allow: /improve
+Allow: /terms
+Allow: /privacy
+
+Disallow: /dashboard
+Disallow: /history
+Disallow: /account
+Disallow: /analyses/
+Disallow: /api/
+
+Sitemap: https://cvooptimize.com/sitemap.xml

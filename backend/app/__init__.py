@@ -11,11 +11,11 @@
 # A factory function lets you create the right app for each context.
 
 import os
-from flask import Flask
+from flask import Flask, jsonify
 from flask_cors import CORS
 
 from .config import config_by_name
-from .extensions import db, migrate, jwt
+from .extensions import db, migrate, jwt, limiter
 
 
 def create_app(config_name: str = None) -> Flask:
@@ -47,6 +47,13 @@ def create_app(config_name: str = None) -> Flask:
     db.init_app(app)
     migrate.init_app(app, db)  # Migrate needs both the app AND the db
     jwt.init_app(app)
+    limiter.init_app(app)
+
+    # Return a clean JSON 429 instead of Flask-Limiter's default HTML page
+    from flask_limiter.errors import RateLimitExceeded
+    @app.errorhandler(RateLimitExceeded)
+    def handle_rate_limit(_e):
+        return jsonify({"error": "Too many requests — please wait before trying again"}), 429
 
     # --- CORS (Cross-Origin Resource Sharing) ---
     # Your React app runs on localhost:5173.
@@ -79,9 +86,11 @@ def create_app(config_name: str = None) -> Flask:
     from .routes.auth import auth_bp
     from .routes.resume import resume_bp
     from .routes.analysis import analysis_bp
+    from .routes.improve import improve_bp
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(resume_bp, url_prefix="/api/resumes")
     app.register_blueprint(analysis_bp, url_prefix="/api/analyses")
+    app.register_blueprint(improve_bp, url_prefix="/api/improve")
 
     # Health check route — used to verify the server is running.
     # Render and other platforms ping this to check if your app is alive.

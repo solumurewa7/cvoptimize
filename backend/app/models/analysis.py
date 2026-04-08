@@ -53,6 +53,14 @@ class Analysis(db.Model):
     # We compute this when saving (first 150 chars of the JD).
     jd_snippet = db.Column(db.String(150), nullable=True)
 
+    # AI-extracted job title (e.g. "Senior Software Engineer"). Extracted by
+    # Gemini at analysis time — no extra API call needed.
+    job_title = db.Column(db.String(60), nullable=True)
+
+    # Relationship to Resume — lazy='joined' avoids N+1 when listing history.
+    # nullable because resume_id uses SET NULL on delete.
+    resume = db.relationship('Resume', foreign_keys=[resume_id], lazy='joined')
+
     # --- JSON columns for the analysis results ---
     # These are lists stored as JSON. PostgreSQL JSONB handles this natively.
     # JavaScript analogy: think of these as arrays saved in the database cell.
@@ -83,6 +91,12 @@ class Analysis(db.Model):
     # "Low", "Medium", or "Strong" — derived from fit_score.
     fit_badge = db.Column(db.String(10), nullable=True)
 
+    # AI-generated bullet points (Gemini Flash output)
+    # strengths: things in the resume that match the JD well (up to 10)
+    # gaps:      things the JD requires that are absent or weak in the resume (up to 10)
+    strengths = db.Column(db.JSON, nullable=True)
+    gaps      = db.Column(db.JSON, nullable=True)
+
     created_at = db.Column(
         db.DateTime(timezone=True),
         nullable=False,
@@ -102,16 +116,21 @@ class Analysis(db.Model):
     def to_summary_dict(self) -> dict:
         """
         Short representation for the history list view.
-        Does NOT include full job_description or all skills — just what's
-        needed to render a history card.
+        Does NOT include full job_description — just what's needed to render
+        a history card including hover stats.
         """
         return {
-            "id": str(self.id),
-            "resume_id": str(self.resume_id) if self.resume_id else None,
-            "jd_snippet": self.jd_snippet,
-            "fit_score": self.fit_score,
-            "fit_badge": self.fit_badge,
-            "created_at": self.created_at.isoformat(),
+            "id":                   str(self.id),
+            "resume_id":            str(self.resume_id) if self.resume_id else None,
+            "resume_filename":      self.resume.filename if self.resume else None,
+            "job_title":            self.job_title,
+            "jd_snippet":           self.jd_snippet,
+            "fit_score":            self.fit_score,
+            "fit_badge":            self.fit_badge,
+            "strengths_count":      len(self.strengths or []),
+            "gaps_count":           len(self.gaps or []),
+            "matched_skills_count": len(self.matched_skills or []),
+            "created_at":           self.created_at.isoformat(),
         }
 
     def to_dict(self) -> dict:
@@ -119,12 +138,16 @@ class Analysis(db.Model):
         return {
             "id": str(self.id),
             "resume_id": str(self.resume_id) if self.resume_id else None,
+            "resume_filename": self.resume.filename if self.resume else None,
+            "job_title": self.job_title,
             "job_description": self.job_description,
             "jd_snippet": self.jd_snippet,
             "extracted_jd_skills": self.extracted_jd_skills,
-            "matched_skills": self.matched_skills,
-            "missing_skills": self.missing_skills,
-            "semantic_matches": self.semantic_matches,
+            "matched_skills": self.matched_skills or [],
+            "missing_skills": self.missing_skills or [],
+            "semantic_matches": self.semantic_matches or [],
+            "strengths": self.strengths or [],
+            "gaps": self.gaps or [],
             "fit_score": self.fit_score,
             "fit_badge": self.fit_badge,
             "created_at": self.created_at.isoformat(),

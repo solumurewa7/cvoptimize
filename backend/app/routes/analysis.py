@@ -3,14 +3,18 @@
 # Analysis routes — run an analysis, list history, get a single result.
 #
 # Routes:
-#   POST /api/analyses          — run analysis against a resume + job description
+#   POST /api/analyses          — run analysis against a resume + job description (auth required)
 #   GET  /api/analyses          — list the user's analysis history
 #   GET  /api/analyses/<id>     — get one full analysis result
+#   POST /api/analyses/guest    — run analysis without auth; result not saved to DB
+
+from datetime import datetime, timezone, timedelta
 
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask_limiter.util import get_remote_address
 
-from ..extensions import db
+from ..extensions import db, limiter
 from ..models import Resume, Analysis
 from ..services.analyzer import run_analysis
 
@@ -22,6 +26,7 @@ analysis_bp = Blueprint("analysis_bp", __name__)
 # ---------------------------------------------------------------------------
 @analysis_bp.route("", methods=["POST"])
 @jwt_required()
+@limiter.limit("20 per day", key_func=lambda: get_jwt_identity() or get_remote_address())
 def create_analysis():
     """
     Run an AI analysis comparing a resume against a job description.
@@ -35,6 +40,18 @@ def create_analysis():
     Returns 201 with the full analysis result on success.
     """
     user_id = get_jwt_identity()
+
+    # Rate limit: max 12 analyses per user per 5-minute window
+    five_min_ago = datetime.now(timezone.utc) - timedelta(minutes=5)
+    recent_count = Analysis.query.filter(
+        Analysis.user_id == user_id,
+        Analysis.created_at >= five_min_ago
+    ).count()
+    if recent_count >= 12:
+        return jsonify({
+            "error": "You're analysing too quickly — please wait a moment before trying again."
+        }), 429
+
     data = request.get_json(force=True, silent=True)
 
     if not data:
@@ -67,11 +84,14 @@ def create_analysis():
         user_id=user_id,
         resume_id=resume.id,
         job_description=jd_text,
+        job_title=result.get("job_title"),
         jd_snippet=result["jd_snippet"],
-        extracted_jd_skills=result["extracted_jd_skills"],
-        matched_skills=result["matched_skills"],
-        missing_skills=result["missing_skills"],
-        semantic_matches=result["semantic_matches"],
+        extracted_jd_skills=result.get("extracted_jd_skills", []),
+        matched_skills=result.get("matched_skills", []),
+        missing_skills=result.get("missing_skills", []),
+        semantic_matches=result.get("semantic_matches", []),
+        strengths=result.get("strengths", []),
+        gaps=result.get("gaps", []),
         fit_score=result["fit_score"],
         fit_badge=result["fit_badge"],
     )
@@ -119,3 +139,51 @@ def get_analysis(analysis_id):
         return jsonify({"error": "Analysis not found"}), 404
 
     return jsonify({"analysis": analysis.to_dict()}), 200
+
+
+# ---------------------------------------------------------------------------
+# POST /api/analyses/guest
+# ---------------------------------------------------------------------------
+@analysis_bp.route("/guest", methods=["POST"])
+@limiter.limit("5 per day")
+def analyze_guest():
+    """
+    Run an AI analysis without authentication. Nothing is saved to the database.
+
+    Accepts multipart/form-data:
+        file            — PDF or DOCX resume (max 5 MB)
+        job_description — plain text job description
+    """
+    from ..services.resume_parser import extract_text, count_words
+
+    file = request.files.get("file")
+    jd_text = request.form.get("job_description", "").strip()
+
+    if not file:
+        return jsonify({"error": "No file uploaded"}), 400
+    if not jd_text or len(jd_text) < 50:
+        return jsonify({"error": "Job description is too short to analyse"}), 400
+
+    ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename else ""
+    if ext not in ("pdf", "docx"):
+        return jsonify({"error": "Only PDF and DOCX files are supported"}), 400
+
+    file_bytes = file.read()
+    if len(file_bytes) > 5 * 1024 * 1024:
+        return jsonify({"error": "File exceeds 5 MB limit"}), 400
+
+    try:
+        resume_text = extract_text(file_bytes, ext)
+    except Exception as e:
+        return jsonify({"error": f"Could not read file: {str(e)}"}), 422
+
+    if not resume_text.strip():
+        return jsonify({"error": "Could not extract text from file"}), 422
+
+    try:
+        result = run_analysis(resume_text, jd_text)
+    except Exception as e:
+        return jsonify({"error": f"Analysis failed: {str(e)}"}), 500
+
+    result["word_count"] = count_words(resume_text)
+    return jsonify({"analysis": result}), 200

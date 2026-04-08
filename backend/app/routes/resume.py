@@ -9,7 +9,9 @@
 #   GET    /api/resumes/<id>     — get one resume (with full extracted text)
 #   DELETE /api/resumes/<id>     — delete a resume
 
-from flask import Blueprint, request, jsonify
+import io
+
+from flask import Blueprint, request, jsonify, send_file
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
 from ..extensions import db
@@ -91,6 +93,7 @@ def upload_resume():
         file_type=file_type,
         extracted_text=extracted_text,
         word_count=word_count,
+        file_data=file_bytes,
     )
     db.session.add(resume)
     db.session.commit()
@@ -167,3 +170,35 @@ def delete_resume(resume_id):
     db.session.commit()
 
     return jsonify({"message": "Resume deleted"}), 200
+
+
+# ---------------------------------------------------------------------------
+# GET /api/resumes/<resume_id>/file
+# ---------------------------------------------------------------------------
+@resume_bp.route("/<uuid:resume_id>/file", methods=["GET"])
+@jwt_required()
+def get_resume_file(resume_id):
+    """
+    Stream the original uploaded file back to the client.
+    PDFs open inline in the browser; DOCX files trigger a download.
+    Returns 404 if the file bytes were not stored (resumes uploaded before
+    this feature was added).
+    """
+    user_id = get_jwt_identity()
+    resume = db.session.get(Resume, resume_id)
+
+    if not resume or str(resume.user_id) != user_id:
+        return jsonify({"error": "Resume not found"}), 404
+
+    if not resume.file_data:
+        return jsonify({"error": "File not available for this resume"}), 404
+
+    mime = "application/pdf" if resume.file_type == "pdf" else \
+           "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+    return send_file(
+        io.BytesIO(resume.file_data),
+        mimetype=mime,
+        as_attachment=False,          # inline — browser opens PDF viewer
+        download_name=resume.filename,
+    )

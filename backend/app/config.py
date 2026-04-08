@@ -79,7 +79,11 @@ class DevelopmentConfig(Config):
 class ProductionConfig(Config):
     """Settings for the live server (Render)."""
     DEBUG = False
-    JWT_COOKIE_SECURE = True   # HTTPS only in production
+    JWT_COOKIE_SECURE = True      # HTTPS only in production
+    # Frontend and backend are on different subdomains (cross-origin).
+    # SameSite=None is required so browsers include the JWT cookie on
+    # cross-origin fetch requests. Must be paired with Secure=True.
+    JWT_COOKIE_SAMESITE = "None"
 
 
 class TestingConfig(Config):

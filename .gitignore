@@ -29,3 +29,12 @@ frontend/.env.local
 
 # === OS ===
 Thumbs.db
+
+# === Claude / AI tooling ===
+.claude/
+
+# === Local test / scratch files ===
+/body.json
+/jd.json
+/login.json
+/cookies.txt

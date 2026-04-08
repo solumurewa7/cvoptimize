@@ -12,7 +12,7 @@
 # This two-cookie pattern protects against CSRF attacks while keeping the
 # JWT itself safe from XSS (since it's httpOnly).
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import (
     create_access_token,
     set_access_cookies,
@@ -23,6 +23,7 @@ from flask_jwt_extended import (
 
 from ..extensions import db
 from ..models import User
+from ..services.email import send_password_reset_email, send_verification_email
 
 auth_bp = Blueprint("auth_bp", __name__)
 
@@ -67,19 +68,23 @@ def register():
     user = User(
         email=email,
         full_name=full_name or None,
-        # NOTE: Email verification is not wired up yet (SendGrid phase).
-        # Setting is_verified=True for now so users can log in immediately.
-        # We'll flip this to False and send a verification email in a later phase.
-        is_verified=True,
+        is_verified=False,
     )
     user.set_password(password)
+    token = user.set_verification_token()
 
     db.session.add(user)
     db.session.commit()
 
+    # Send verification email (fire-and-forget — don't fail registration if email errors)
+    try:
+        frontend_url = current_app.config.get("FRONTEND_URL", "http://localhost:5173")
+        verify_url = f"{frontend_url}/verify-email?token={token}"
+        send_verification_email(user.email, verify_url)
+    except Exception:
+        pass
+
     # --- Issue JWT and set cookies ---
-    # The identity stored in the token is the user's UUID (as a string).
-    # We retrieve it later with get_jwt_identity() in protected routes.
     access_token = create_access_token(identity=str(user.id))
     response = jsonify({"message": "Account created", "user": user.to_dict()})
     set_access_cookies(response, access_token)
@@ -172,3 +177,169 @@ def me():
         return response, 401
 
     return jsonify({"user": user.to_dict()}), 200
+
+
+# ---------------------------------------------------------------------------
+# POST /api/auth/forgot-password
+# ---------------------------------------------------------------------------
+@auth_bp.route("/forgot-password", methods=["POST"])
+def forgot_password():
+    data  = request.get_json(force=True, silent=True) or {}
+    email = (data.get("email") or "").strip().lower()
+
+    user = User.query.filter_by(email=email).first()
+
+    # Always return 200 — never reveal whether the email is registered.
+    if user:
+        token = user.set_reset_token()
+        db.session.commit()
+        frontend_url = current_app.config.get("FRONTEND_URL", "http://localhost:5173")
+        reset_url    = f"{frontend_url}/reset-password?token={token}"
+        try:
+            send_password_reset_email(user.email, reset_url)
+        except Exception:
+            pass  # Don't expose email errors to the client
+
+    return jsonify({"message": "If that email is registered, a reset link has been sent."}), 200
+
+
+# ---------------------------------------------------------------------------
+# PUT /api/auth/profile
+# ---------------------------------------------------------------------------
+@auth_bp.route("/profile", methods=["PUT"])
+@jwt_required()
+def update_profile():
+    user_id = get_jwt_identity()
+    user    = db.session.get(User, user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    data     = request.get_json(force=True, silent=True) or {}
+    new_name  = data.get("full_name", user.full_name)
+    new_email = (data.get("email") or "").strip().lower() or user.email
+
+    if new_email != user.email:
+        if User.query.filter_by(email=new_email).first():
+            return jsonify({"error": "That email is already in use"}), 409
+        user.email = new_email
+
+    user.full_name = (new_name or "").strip() or None
+    db.session.commit()
+    return jsonify({"user": user.to_dict()}), 200
+
+
+# ---------------------------------------------------------------------------
+# PUT /api/auth/password
+# ---------------------------------------------------------------------------
+@auth_bp.route("/password", methods=["PUT"])
+@jwt_required()
+def change_password():
+    user_id = get_jwt_identity()
+    user    = db.session.get(User, user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    data             = request.get_json(force=True, silent=True) or {}
+    current_password = data.get("current_password", "")
+    new_password     = data.get("new_password", "")
+
+    if not user.check_password(current_password):
+        return jsonify({"error": "Current password is incorrect"}), 400
+    if len(new_password) < 8:
+        return jsonify({"error": "New password must be at least 8 characters"}), 400
+
+    user.set_password(new_password)
+    db.session.commit()
+    return jsonify({"message": "Password updated"}), 200
+
+
+# ---------------------------------------------------------------------------
+# DELETE /api/auth/account
+# ---------------------------------------------------------------------------
+@auth_bp.route("/account", methods=["DELETE"])
+@jwt_required()
+def delete_account():
+    user_id = get_jwt_identity()
+    user    = db.session.get(User, user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    data     = request.get_json(force=True, silent=True) or {}
+    password = data.get("password", "")
+
+    if not user.check_password(password):
+        return jsonify({"error": "Incorrect password"}), 400
+
+    db.session.delete(user)
+    db.session.commit()
+
+    response = jsonify({"message": "Account deleted"})
+    unset_jwt_cookies(response)
+    return response, 200
+
+
+# ---------------------------------------------------------------------------
+# POST /api/auth/reset-password
+# ---------------------------------------------------------------------------
+@auth_bp.route("/reset-password", methods=["POST"])
+def reset_password():
+    data     = request.get_json(force=True, silent=True) or {}
+    token    = (data.get("token") or "").strip()
+    password = data.get("password") or ""
+
+    if len(password) < 8:
+        return jsonify({"error": "Password must be at least 8 characters"}), 400
+
+    user = User.query.filter_by(reset_token=token).first()
+    if not user or not user.reset_token_valid():
+        return jsonify({"error": "This reset link is invalid or has expired."}), 400
+
+    user.set_password(password)
+    user.clear_reset_token()
+    db.session.commit()
+
+    return jsonify({"message": "Password updated — you can now log in."}), 200
+
+
+# ---------------------------------------------------------------------------
+# GET /api/auth/verify-email?token=...
+# ---------------------------------------------------------------------------
+@auth_bp.route("/verify-email", methods=["GET"])
+def verify_email():
+    token = request.args.get("token", "").strip()
+    user  = User.query.filter_by(verification_token=token).first()
+
+    if not user or not user.verification_token_valid():
+        return jsonify({"error": "Invalid or expired verification link"}), 400
+
+    user.is_verified = True
+    user.clear_verification_token()
+    db.session.commit()
+
+    return jsonify({"message": "Email verified"}), 200
+
+
+# ---------------------------------------------------------------------------
+# POST /api/auth/resend-verification
+# ---------------------------------------------------------------------------
+@auth_bp.route("/resend-verification", methods=["POST"])
+@jwt_required()
+def resend_verification():
+    user_id = get_jwt_identity()
+    user    = db.session.get(User, user_id)
+
+    # Silent success if already verified — don't leak state
+    if not user or user.is_verified:
+        return jsonify({"message": "ok"}), 200
+
+    token = user.set_verification_token()
+    db.session.commit()
+
+    try:
+        frontend_url = current_app.config.get("FRONTEND_URL", "http://localhost:5173")
+        verify_url   = f"{frontend_url}/verify-email?token={token}"
+        send_verification_email(user.email, verify_url)
+    except Exception:
+        pass
+
+    return jsonify({"message": "Verification email sent — check your inbox"}), 200
