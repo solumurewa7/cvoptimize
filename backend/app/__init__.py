@@ -64,8 +64,13 @@ def create_app(config_name: str = None) -> Flask:
     # supports_credentials=True is CRITICAL — without it, the browser
     # won't send the httpOnly JWT cookie along with API requests.
     frontend_url = app.config.get("FRONTEND_URL", "http://localhost:5173")
+    allowed_origins = [
+        "http://localhost:5173",
+        "https://cvooptimize-frontend.onrender.com",
+        frontend_url,          # picks up any custom domain set via env var
+    ]
     CORS(app,
-         origins=[frontend_url],
+         origins=list(set(allowed_origins)),
          supports_credentials=True,
          allow_headers=["Content-Type", "X-CSRF-TOKEN"])
 
