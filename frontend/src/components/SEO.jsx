@@ -2,7 +2,7 @@
 import { Helmet } from 'react-helmet-async'
 
 // Update to custom domain once purchased. For now uses the Render subdomain.
-const BASE_URL = import.meta.env.VITE_PUBLIC_URL || 'https://cvooptimize-frontend.onrender.com'
+const BASE_URL = import.meta.env.VITE_PUBLIC_URL || 'https://cvooptimize.onrender.com'
 const OG_IMAGE = `${BASE_URL}/og-image.svg`
 
 const DEFAULT_DESC = 'Match your resume to any job description in seconds. Get an instant AI fit score, matched skills, and gaps. Free to use.'
