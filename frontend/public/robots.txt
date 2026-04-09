@@ -11,4 +11,4 @@ Disallow: /account
 Disallow: /analyses/
 Disallow: /api/
 
-Sitemap: https://cvooptimize.onrender.com/sitemap.xml
+Sitemap: https://cvooptimize-frontend.onrender.com/sitemap.xml
