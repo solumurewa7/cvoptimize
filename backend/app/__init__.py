@@ -67,6 +67,8 @@ def create_app(config_name: str = None) -> Flask:
     allowed_origins = [
         "http://localhost:5173",
         "https://cvooptimize-frontend.onrender.com",
+        "https://cvoptimize.site",
+        "https://www.cvoptimize.site",
         frontend_url,          # picks up any custom domain set via env var
     ]
     CORS(app,
