@@ -17,6 +17,8 @@ export default function AnalysisResult({ result }) {
   const matchedSkills = result.matched_skills || []
   const missingSkills = result.missing_skills || []
   const total         = strengths.length + gaps.length
+  const totalSkills   = matchedSkills.length + missingSkills.length
+  const skillPct      = totalSkills > 0 ? Math.round((matchedSkills.length / totalSkills) * 100) : null
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -54,6 +56,35 @@ export default function AnalysisResult({ result }) {
               <Stat value={matchedSkills.length} label="matched skills" color="var(--accent)" />
             )}
           </div>
+
+          {/* Skills match bar */}
+          {skillPct !== null && (
+            <div style={{ marginTop: '14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                  Skills Match
+                </span>
+                <span style={{ color: skillPct >= 70 ? 'var(--success)' : skillPct >= 40 ? 'var(--warning)' : 'var(--danger)', fontSize: '0.82rem', fontWeight: 700 }}>
+                  {matchedSkills.length} / {totalSkills} — {skillPct}%
+                </span>
+              </div>
+              <div style={{ height: '7px', borderRadius: '4px', background: 'var(--navy-700)', overflow: 'hidden' }}>
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${skillPct}%` }}
+                  transition={{ duration: 1, ease: EASE, delay: 0.15 }}
+                  style={{
+                    height: '100%', borderRadius: '4px',
+                    background: skillPct >= 70 ? 'var(--success)' : skillPct >= 40 ? 'var(--warning)' : 'var(--danger)',
+                  }}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '16px', marginTop: '5px' }}>
+                <LegendDot color="var(--success)" label={`Matched (${matchedSkills.length})`} />
+                <LegendDot color="var(--navy-600)" label={`Missing (${missingSkills.length})`} />
+              </div>
+            </div>
+          )}
 
           {/* Strength/gap split bar */}
           {total > 0 && (

@@ -126,6 +126,46 @@ def list_analyses():
 
 
 # ---------------------------------------------------------------------------
+# GET /api/analyses/jd-history
+# ---------------------------------------------------------------------------
+@analysis_bp.route("/jd-history", methods=["GET"])
+@jwt_required()
+def jd_history():
+    """
+    Return the user's recent unique job descriptions for re-use on the Analyze page.
+    Deduplicates by jd_snippet (keeps most recent per unique snippet).
+    Returns up to 8 entries.
+    """
+    user_id = get_jwt_identity()
+
+    recent = (
+        Analysis.query
+        .filter_by(user_id=user_id)
+        .order_by(Analysis.created_at.desc())
+        .limit(50)
+        .all()
+    )
+
+    seen = set()
+    unique = []
+    for a in recent:
+        key = (a.jd_snippet or "")[:80]
+        if key and key not in seen:
+            seen.add(key)
+            unique.append({
+                "id": str(a.id),
+                "job_title": a.job_title,
+                "jd_snippet": a.jd_snippet,
+                "job_description": a.job_description,
+                "created_at": a.created_at.isoformat(),
+            })
+        if len(unique) >= 8:
+            break
+
+    return jsonify({"jd_history": unique}), 200
+
+
+# ---------------------------------------------------------------------------
 # GET /api/analyses/<analysis_id>
 # ---------------------------------------------------------------------------
 @analysis_bp.route("/<uuid:analysis_id>", methods=["GET"])

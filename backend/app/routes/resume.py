@@ -1,12 +1,13 @@
 # routes/resume.py
 #
-# Resume routes — upload, list, get, delete.
+# Resume routes — upload, list, get, patch, delete.
 # All routes are protected: you must be logged in (valid JWT cookie).
 #
 # Routes:
 #   POST   /api/resumes/upload   — upload a PDF or DOCX, parse it, save to DB
 #   GET    /api/resumes          — list all resumes for the logged-in user
 #   GET    /api/resumes/<id>     — get one resume (with full extracted text)
+#   PATCH  /api/resumes/<id>     — update custom_name and/or color
 #   DELETE /api/resumes/<id>     — delete a resume
 
 import io
@@ -24,6 +25,8 @@ resume_bp = Blueprint("resume_bp", __name__)
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB in bytes
 
 ALLOWED_EXTENSIONS = {"pdf", "docx"}
+
+ALLOWED_COLORS = {"amber", "rose", "emerald", "violet", "sky"}
 
 
 def _get_file_type(filename: str) -> str | None:
@@ -86,6 +89,13 @@ def upload_resume():
 
     word_count = count_words(extracted_text)
 
+    # --- Optional metadata ---
+    raw_name = request.form.get("custom_name", "").strip()
+    custom_name = raw_name[:100] if raw_name else None
+
+    raw_color = request.form.get("color", "").strip().lower()
+    color = raw_color if raw_color in ALLOWED_COLORS else None
+
     # --- Save to database ---
     resume = Resume(
         user_id=user_id,
@@ -94,6 +104,8 @@ def upload_resume():
         extracted_text=extracted_text,
         word_count=word_count,
         file_data=file_bytes,
+        custom_name=custom_name,
+        color=color,
     )
     db.session.add(resume)
     db.session.commit()
@@ -151,6 +163,44 @@ def get_resume(resume_id):
         return jsonify({"error": "Resume not found"}), 404  # 404, not 403, to avoid leaking existence
 
     return jsonify({"resume": resume.to_dict(include_text=True)}), 200
+
+
+# ---------------------------------------------------------------------------
+# PATCH /api/resumes/<resume_id>
+# ---------------------------------------------------------------------------
+@resume_bp.route("/<uuid:resume_id>", methods=["PATCH"])
+@jwt_required()
+def patch_resume(resume_id):
+    """
+    Update the custom_name and/or color of a resume.
+    Accepts JSON: { "custom_name": str|null, "color": str|null }
+    """
+    user_id = get_jwt_identity()
+    resume = db.session.get(Resume, resume_id)
+
+    if not resume or str(resume.user_id) != user_id:
+        return jsonify({"error": "Resume not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+
+    if "custom_name" in data:
+        name = data["custom_name"]
+        if name is None or name == "":
+            resume.custom_name = None
+        else:
+            resume.custom_name = str(name).strip()[:100]
+
+    if "color" in data:
+        color = data["color"]
+        if color is None or color == "":
+            resume.color = None
+        elif str(color).lower() in ALLOWED_COLORS:
+            resume.color = str(color).lower()
+        else:
+            return jsonify({"error": f"Invalid color. Allowed: {sorted(ALLOWED_COLORS)}"}), 400
+
+    db.session.commit()
+    return jsonify({"resume": resume.to_dict()}), 200
 
 
 # ---------------------------------------------------------------------------

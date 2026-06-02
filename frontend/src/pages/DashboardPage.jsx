@@ -10,6 +10,7 @@ import Navbar from '../components/Navbar'
 import SEO from '../components/SEO'
 import { useAuth } from '../context/AuthContext'
 import { useTypewriter } from '../hooks/useTypewriter'
+import { RESUME_COLORS } from '../utils/resumeColors'
 
 const EASE = [0.22, 1, 0.36, 1]
 const BADGE_COLOR = { Strong: 'var(--success)', Medium: 'var(--warning)', Low: 'var(--danger)' }
@@ -26,6 +27,10 @@ export default function DashboardPage() {
   function handleResumeUploaded(resume) {
     setResumes(prev => [resume, ...prev])
     setShowUpload(false)
+  }
+
+  function handleResumePatched(updated) {
+    setResumes(prev => prev.map(r => r.id === updated.id ? updated : r))
   }
 
   useEffect(() => {
@@ -134,7 +139,7 @@ export default function DashboardPage() {
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '14px' }}>
                   {resumes.map((resume, i) => (
-                    <ResumeCard key={resume.id} resume={resume} delay={i * 0.04} onUse={() => navigate('/analyze', { state: { resume } })} onDelete={() => handleDelete(resume)} />
+                    <ResumeCard key={resume.id} resume={resume} delay={i * 0.04} onUse={() => navigate('/analyze', { state: { resume } })} onDelete={() => handleDelete(resume)} onPatched={handleResumePatched} />
                   ))}
                   <motion.button
                     initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
@@ -388,16 +393,58 @@ function ToolCard({ icon, title, description, tag, tagColor, onClick, disabled }
 }
 
 // ─── Resume card ──────────────────────────────────────────────────────────────
-function ResumeCard({ resume, delay, onUse, onDelete }) {
+function ResumeCard({ resume, delay, onUse, onDelete, onPatched }) {
   const ext = resume.filename.split('.').pop().toUpperCase()
   const d = new Date(resume.created_at)
   const date = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
   const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+  const [editing, setEditing] = useState(false)
+  const [nameVal, setNameVal] = useState(resume.custom_name || '')
+  const nameInputRef = useRef(null)
+
+  const colorStyle = resume.color && RESUME_COLORS[resume.color]
+    ? { background: RESUME_COLORS[resume.color].bg, border: `1px solid ${RESUME_COLORS[resume.color].border}`, borderLeft: `3px solid ${RESUME_COLORS[resume.color].dot}` }
+    : { background: 'var(--navy-900)', border: '1px solid var(--navy-700)' }
 
   function openPreview() {
     const base = import.meta.env.VITE_API_URL || ''
     window.open(`${base}/api/resumes/${resume.id}/file`, '_blank', 'noopener,noreferrer')
   }
+
+  async function patchColor(color) {
+    const newColor = color === resume.color ? null : color
+    const optimistic = { ...resume, color: newColor }
+    onPatched(optimistic)
+    try {
+      const res = await client.patch(`/api/resumes/${resume.id}`, { color: newColor })
+      onPatched(res.data.resume)
+    } catch {
+      onPatched(resume) // roll back
+      toast.error('Could not update color')
+    }
+  }
+
+  async function saveName() {
+    setEditing(false)
+    const newName = nameVal.trim() || null
+    if (newName === (resume.custom_name || null)) return
+    const optimistic = { ...resume, custom_name: newName }
+    onPatched(optimistic)
+    try {
+      const res = await client.patch(`/api/resumes/${resume.id}`, { custom_name: newName })
+      onPatched(res.data.resume)
+    } catch {
+      onPatched(resume)
+      setNameVal(resume.custom_name || '')
+      toast.error('Could not update label')
+    }
+  }
+
+  useEffect(() => {
+    if (editing && nameInputRef.current) nameInputRef.current.focus()
+  }, [editing])
+
+  const displayName = resume.custom_name || resume.filename
 
   return (
     <motion.div
@@ -405,8 +452,7 @@ function ResumeCard({ resume, delay, onUse, onDelete }) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, delay, ease: [0.22, 1, 0.36, 1] }}
       style={{
-        background: 'var(--navy-900)',
-        border: '1px solid var(--navy-700)',
+        ...colorStyle,
         borderRadius: '12px',
         padding: '18px',
         display: 'flex',
@@ -438,23 +484,55 @@ function ResumeCard({ resume, delay, onUse, onDelete }) {
         </button>
 
         <div style={{ flex: 1, minWidth: 0 }}>
-          {/* Filename — clickable to preview if available */}
-          <p
-            onClick={resume.has_file ? openPreview : undefined}
-            style={{
-              color: resume.has_file ? 'var(--accent)' : 'var(--text-primary)',
-              fontSize: '0.825rem', fontWeight: 600,
-              margin: '0 0 3px',
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              cursor: resume.has_file ? 'pointer' : 'default',
-              textDecoration: resume.has_file ? 'underline' : 'none',
-              textDecorationColor: 'rgba(59,130,246,0.4)',
-              textUnderlineOffset: '2px',
-            }}
-            title={resume.has_file ? 'Click to preview' : undefined}
-          >
-            {resume.filename}
-          </p>
+          {/* Name — click pencil to edit */}
+          {editing ? (
+            <input
+              ref={nameInputRef}
+              value={nameVal}
+              onChange={e => setNameVal(e.target.value)}
+              onBlur={saveName}
+              onKeyDown={e => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') { setEditing(false); setNameVal(resume.custom_name || '') } }}
+              maxLength={100}
+              placeholder={resume.filename}
+              style={{
+                background: 'rgba(255,255,255,0.06)', border: '1px solid var(--accent)',
+                borderRadius: '5px', color: 'var(--text-primary)', fontSize: '0.825rem',
+                fontWeight: 600, padding: '2px 6px', width: '100%', fontFamily: 'inherit',
+                outline: 'none', marginBottom: '3px',
+              }}
+            />
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '3px' }}>
+              <p
+                onClick={resume.has_file ? openPreview : undefined}
+                style={{
+                  color: resume.has_file ? 'var(--accent)' : 'var(--text-primary)',
+                  fontSize: '0.825rem', fontWeight: 600, margin: 0,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  cursor: resume.has_file ? 'pointer' : 'default',
+                  textDecoration: resume.has_file ? 'underline' : 'none',
+                  textDecorationColor: 'rgba(59,130,246,0.4)',
+                  textUnderlineOffset: '2px',
+                  flex: 1, minWidth: 0,
+                }}
+                title={resume.has_file ? 'Click to preview' : undefined}
+              >
+                {displayName}
+              </p>
+              <button
+                onClick={() => { setNameVal(resume.custom_name || ''); setEditing(true) }}
+                title="Edit label"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: '1px', flexShrink: 0, display: 'flex', opacity: 0.6, transition: 'opacity 0.15s' }}
+                onMouseEnter={e => e.currentTarget.style.opacity = '1'}
+                onMouseLeave={e => e.currentTarget.style.opacity = '0.6'}
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                </svg>
+              </button>
+            </div>
+          )}
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', margin: 0 }}>
             {resume.word_count?.toLocaleString()} words · {ext}
           </p>
@@ -462,9 +540,41 @@ function ResumeCard({ resume, delay, onUse, onDelete }) {
         <TrashButton onClick={(e) => { e.stopPropagation(); onDelete() }} />
       </div>
 
-      <p style={{ color: 'var(--text-secondary)', fontSize: '0.72rem', margin: 0 }}>
-        Uploaded {date} · {time}
-      </p>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.72rem', margin: 0 }}>
+          Uploaded {date} · {time}
+        </p>
+        {/* Color picker dots */}
+        <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+          {Object.entries(RESUME_COLORS).map(([key, c]) => (
+            <button
+              key={key}
+              onClick={() => patchColor(key)}
+              title={key}
+              style={{
+                width: 12, height: 12, borderRadius: '50%',
+                background: c.dot,
+                border: resume.color === key ? `2px solid #fff` : '2px solid transparent',
+                padding: 0, cursor: 'pointer', flexShrink: 0,
+                outline: 'none', transition: 'transform 0.1s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.3)'}
+              onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+            />
+          ))}
+          {resume.color && (
+            <button
+              onClick={() => patchColor(resume.color)}
+              title="Remove color"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: '1px', fontSize: '0.65rem', lineHeight: 1, opacity: 0.6, transition: 'opacity 0.15s' }}
+              onMouseEnter={e => e.currentTarget.style.opacity = '1'}
+              onMouseLeave={e => e.currentTarget.style.opacity = '0.6'}
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      </div>
 
       <button
         onClick={onUse}
@@ -665,8 +775,10 @@ function VerificationBanner() {
 
 // ─── Upload modal ─────────────────────────────────────────────────────────────
 function UploadModal({ open, onClose, onUploaded }) {
-  const [uploading, setUploading] = useState(false)
-  const [error,     setError]     = useState('')
+  const [uploading,    setUploading]    = useState(false)
+  const [error,        setError]        = useState('')
+  const [customName,   setCustomName]   = useState('')
+  const [pickedColor,  setPickedColor]  = useState(null)
 
   // Close on Escape
   useEffect(() => {
@@ -676,8 +788,10 @@ function UploadModal({ open, onClose, onUploaded }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [open, onClose])
 
-  // Reset error when modal reopens
-  useEffect(() => { if (open) setError('') }, [open])
+  // Reset state when modal reopens
+  useEffect(() => {
+    if (open) { setError(''); setCustomName(''); setPickedColor(null) }
+  }, [open])
 
   const onDrop = useCallback(async (accepted) => {
     if (!accepted.length) return
@@ -686,6 +800,8 @@ function UploadModal({ open, onClose, onUploaded }) {
     setUploading(true)
     const form = new FormData()
     form.append('file', file)
+    if (customName.trim()) form.append('custom_name', customName.trim())
+    if (pickedColor)       form.append('color', pickedColor)
     try {
       const res = await client.post('/api/resumes/upload', form, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -697,7 +813,7 @@ function UploadModal({ open, onClose, onUploaded }) {
     } finally {
       setUploading(false)
     }
-  }, [onUploaded])
+  }, [onUploaded, customName, pickedColor])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -790,6 +906,42 @@ function UploadModal({ open, onClose, onUploaded }) {
                     </p>
                   </>
                 )}
+              </div>
+
+              {/* Optional label + color */}
+              <div style={{ marginTop: '14px', display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <input
+                  value={customName}
+                  onChange={e => setCustomName(e.target.value)}
+                  maxLength={100}
+                  placeholder="Label (optional)"
+                  disabled={uploading}
+                  style={{
+                    flex: 1, background: 'var(--navy-800)', border: '1px solid var(--navy-600)',
+                    borderRadius: '8px', color: 'var(--text-primary)', fontSize: '0.85rem',
+                    padding: '8px 12px', fontFamily: 'inherit', outline: 'none',
+                    transition: 'border-color 0.15s',
+                  }}
+                  onFocus={e => e.target.style.borderColor = 'var(--accent)'}
+                  onBlur={e => e.target.style.borderColor = 'var(--navy-600)'}
+                />
+                <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0 }}>
+                  {Object.entries(RESUME_COLORS).map(([key, c]) => (
+                    <button
+                      key={key}
+                      onClick={() => setPickedColor(pickedColor === key ? null : key)}
+                      title={key}
+                      disabled={uploading}
+                      style={{
+                        width: 16, height: 16, borderRadius: '50%', background: c.dot,
+                        border: pickedColor === key ? '2px solid #fff' : '2px solid transparent',
+                        padding: 0, cursor: 'pointer', outline: 'none', transition: 'transform 0.1s',
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.25)'}
+                      onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                    />
+                  ))}
+                </div>
               </div>
 
               {error && (

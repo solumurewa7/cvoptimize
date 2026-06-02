@@ -16,6 +16,7 @@ import SEO from '../components/SEO'
 import ScoreRing from '../components/ScoreRing'
 import { useAuth } from '../context/AuthContext'
 import { useIsMobile } from '../hooks/useIsMobile'
+import { RESUME_COLORS } from '../utils/resumeColors'
 
 const EASE = [0.22, 1, 0.36, 1]
 
@@ -236,30 +237,36 @@ export default function ImproverPage() {
                 — or pick a saved resume —
               </p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                {savedResumes.map(r => (
-                  <button
-                    key={r.id}
-                    onClick={() => { setResume(r); setResult(null) }}
-                    style={{
-                      background: resume?.id === r.id ? 'rgba(59,130,246,0.12)' : 'var(--navy-800)',
-                      border: `1px solid ${resume?.id === r.id ? 'var(--accent)' : 'var(--navy-700)'}`,
-                      borderRadius: '8px',
-                      padding: '6px 12px',
-                      color: resume?.id === r.id ? 'var(--accent)' : 'var(--text-secondary)',
-                      fontSize: '0.8rem',
-                      fontWeight: 500,
-                      cursor: 'pointer',
-                      fontFamily: 'inherit',
-                      transition: 'all 0.15s',
-                      maxWidth: '200px',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {r.filename}
-                  </button>
-                ))}
+                {savedResumes.map(r => {
+                  const isSelected = resume?.id === r.id
+                  const colorStyle = r.color && RESUME_COLORS[r.color]
+                    ? { background: RESUME_COLORS[r.color].bg, borderColor: isSelected ? RESUME_COLORS[r.color].dot : RESUME_COLORS[r.color].border, borderLeftColor: RESUME_COLORS[r.color].dot, borderLeftWidth: '3px' }
+                    : { background: isSelected ? 'rgba(59,130,246,0.12)' : 'var(--navy-800)', borderColor: isSelected ? 'var(--accent)' : 'var(--navy-700)' }
+                  return (
+                    <button
+                      key={r.id}
+                      onClick={() => { setResume(r); setResult(null) }}
+                      style={{
+                        ...colorStyle,
+                        borderStyle: 'solid', borderWidth: '1px',
+                        borderRadius: '8px',
+                        padding: '6px 12px',
+                        color: isSelected ? 'var(--text-primary)' : 'var(--text-secondary)',
+                        fontSize: '0.8rem',
+                        fontWeight: isSelected ? 600 : 500,
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
+                        transition: 'all 0.15s',
+                        maxWidth: '200px',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {r.custom_name || r.filename}
+                    </button>
+                  )
+                })}
               </div>
             </div>
           )}

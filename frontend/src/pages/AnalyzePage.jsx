@@ -14,6 +14,7 @@ import SEO from '../components/SEO'
 import AnalysisResult from '../components/AnalysisResult'
 import { useAuth } from '../context/AuthContext'
 import { useIsMobile } from '../hooks/useIsMobile'
+import { RESUME_COLORS } from '../utils/resumeColors'
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 export default function AnalyzePage() {
@@ -32,6 +33,8 @@ export default function AnalyzePage() {
   const [analysing,    setAnalysing]    = useState(false)
   const [result,       setResult]       = useState(null)
   const [savedResumes, setSavedResumes] = useState([])
+  const [jdHistory,    setJdHistory]    = useState([])
+  const [jdHistOpen,   setJdHistOpen]   = useState(false)
 
   // Pre-fill resume when navigated from Dashboard with state
   useEffect(() => {
@@ -40,11 +43,14 @@ export default function AnalyzePage() {
     }
   }, [isGuest, location.state])
 
-  // Load saved resumes for auth users
+  // Load saved resumes + JD history for auth users
   useEffect(() => {
     if (!isGuest) {
       client.get('/api/resumes')
         .then(res => setSavedResumes(res.data.resumes || []))
+        .catch(() => {})
+      client.get('/api/analyses/jd-history')
+        .then(res => setJdHistory(res.data.jd_history || []))
         .catch(() => {})
     }
   }, [isGuest])
@@ -216,30 +222,36 @@ export default function AnalyzePage() {
                   — or pick a saved resume —
                 </p>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                  {savedResumes.map(r => (
-                    <button
-                      key={r.id}
-                      onClick={() => { setResume(r); setResult(null) }}
-                      style={{
-                        background: resume?.id === r.id ? 'rgba(59,130,246,0.12)' : 'var(--navy-800)',
-                        border: `1px solid ${resume?.id === r.id ? 'var(--accent)' : 'var(--navy-700)'}`,
-                        borderRadius: '8px',
-                        padding: '6px 12px',
-                        color: resume?.id === r.id ? 'var(--accent)' : 'var(--text-secondary)',
-                        fontSize: '0.8rem',
-                        fontWeight: 500,
-                        cursor: 'pointer',
-                        fontFamily: 'inherit',
-                        transition: 'all 0.15s',
-                        maxWidth: '200px',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {r.filename}
-                    </button>
-                  ))}
+                  {savedResumes.map(r => {
+                    const isSelected = resume?.id === r.id
+                    const colorStyle = r.color && RESUME_COLORS[r.color]
+                      ? { background: isSelected ? RESUME_COLORS[r.color].bg : RESUME_COLORS[r.color].bg, borderColor: isSelected ? RESUME_COLORS[r.color].dot : RESUME_COLORS[r.color].border, borderLeftColor: RESUME_COLORS[r.color].dot, borderLeftWidth: '3px' }
+                      : { background: isSelected ? 'rgba(59,130,246,0.12)' : 'var(--navy-800)', borderColor: isSelected ? 'var(--accent)' : 'var(--navy-700)' }
+                    return (
+                      <button
+                        key={r.id}
+                        onClick={() => { setResume(r); setResult(null) }}
+                        style={{
+                          ...colorStyle,
+                          borderStyle: 'solid', borderWidth: '1px',
+                          borderRadius: '8px',
+                          padding: '6px 12px',
+                          color: isSelected ? 'var(--text-primary)' : 'var(--text-secondary)',
+                          fontSize: '0.8rem',
+                          fontWeight: isSelected ? 600 : 500,
+                          cursor: 'pointer',
+                          fontFamily: 'inherit',
+                          transition: 'all 0.15s',
+                          maxWidth: '200px',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {r.custom_name || r.filename}
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
             )}
@@ -247,6 +259,61 @@ export default function AnalyzePage() {
 
           {/* ── Step 2: Job description ─────────────────────────────────── */}
           <StepCard step={2} title="Paste the job description" delay={0.1}>
+            {/* JD history — auth users with past analyses */}
+            {!isGuest && jdHistory.length > 0 && (
+              <div style={{ marginBottom: '12px' }}>
+                <button
+                  onClick={() => setJdHistOpen(o => !o)}
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    color: 'var(--accent)', fontSize: '0.78rem', fontWeight: 600,
+                    padding: 0, display: 'flex', alignItems: 'center', gap: '5px',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                    style={{ transition: 'transform 0.2s', transform: jdHistOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}>
+                    <polyline points="9 18 15 12 9 6"/>
+                  </svg>
+                  Recent job descriptions
+                </button>
+                <AnimatePresence>
+                  {jdHistOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.2 }}
+                      style={{ overflow: 'hidden' }}
+                    >
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', paddingTop: '8px' }}>
+                        {jdHistory.map(jd => (
+                          <button
+                            key={jd.id}
+                            onClick={() => { setJdText(jd.job_description); setJdHistOpen(false) }}
+                            style={{
+                              background: 'var(--navy-800)', border: '1px solid var(--navy-700)',
+                              borderRadius: '8px', padding: '8px 12px', cursor: 'pointer',
+                              textAlign: 'left', fontFamily: 'inherit', transition: 'border-color 0.15s',
+                              display: 'flex', flexDirection: 'column', gap: '2px',
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--accent)'}
+                            onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--navy-700)'}
+                          >
+                            <span style={{ color: 'var(--text-primary)', fontSize: '0.82rem', fontWeight: 600 }}>
+                              {jd.job_title || 'Untitled role'}
+                            </span>
+                            <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {jd.jd_snippet}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
             <textarea
               className="cv-input"
               value={jdText}

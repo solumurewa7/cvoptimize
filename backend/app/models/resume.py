@@ -59,6 +59,14 @@ class Resume(db.Model):
     # We use this for the "too short / too long" advisory check.
     word_count = db.Column(db.Integer, nullable=True)
 
+    # Optional user-supplied label (e.g. "General", "Software Focus").
+    # If null, the original filename is displayed instead.
+    custom_name = db.Column(db.String(100), nullable=True)
+
+    # Optional color key for the resume card tint.
+    # One of: "amber", "rose", "emerald", "violet", "sky", or null (default style).
+    color = db.Column(db.String(20), nullable=True)
+
     # "pdf" or "docx" — tells us which parser was used.
     file_type = db.Column(db.String(10), nullable=False)
 
@@ -85,6 +93,8 @@ class Resume(db.Model):
         result = {
             "id": str(self.id),
             "filename": self.filename,
+            "custom_name": self.custom_name,
+            "color": self.color,
             "file_type": self.file_type,
             "word_count": self.word_count,
             "improvement_findings": self.improvement_findings,
