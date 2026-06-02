@@ -47,10 +47,11 @@ function ProtectedRoute({ children }) {
 }
 
 // PublicRoute: already logged in → go to /dashboard
+// Show children while auth check is in progress so the page never appears blank.
+// Redirect to dashboard only once we know for certain the user is logged in.
 function PublicRoute({ children }) {
   const { user, loading } = useAuth()
-  if (loading) return null
-  if (user) return <Navigate to="/dashboard" replace />
+  if (!loading && user) return <Navigate to="/dashboard" replace />
   return children
 }
 

@@ -72,7 +72,9 @@ def create_app(config_name: str = None) -> Flask:
     CORS(app,
          origins=list(set(allowed_origins)),
          supports_credentials=True,
-         allow_headers=["Content-Type", "X-CSRF-TOKEN"])
+         allow_headers=["Content-Type", "X-CSRF-TOKEN"],
+         methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+         max_age=3600)
 
     # --- Import models ---
     # We import models INSIDE create_app() to avoid circular imports.
