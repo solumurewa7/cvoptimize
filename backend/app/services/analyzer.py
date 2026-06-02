@@ -83,6 +83,7 @@ Return ONLY a valid JSON object — no markdown, no explanation, no extra text. 
 {{
   "fit_score": <integer 0-100>,
   "job_title": "<Short job title extracted or inferred from the JD, e.g. 'Senior Software Engineer', 'Marketing Manager'. Even if not stated explicitly, infer a reasonable title. Max 60 characters.>",
+  "company": "<Company name extracted from the JD, e.g. 'Google', 'Accenture'. Return null (not a string) if no company is mentioned or identifiable.>",
   "strengths": [
     "<Specific bullet. Reference actual resume content AND the JD requirement it satisfies. Max 2 sentences.>",
     "...(up to 10 total)"
@@ -159,7 +160,10 @@ def run_analysis(resume_text: str, jd_text: str) -> dict:
     score = int(data.get("fit_score", 0))
     score = max(0, min(100, score))  # clamp to [0, 100]
 
-    job_title = str(data.get("job_title", "")).strip()[:60] or None
+    job_title = str(data.get("job_title", "") or "").strip()[:60] or None
+
+    raw_company = data.get("company")
+    company = str(raw_company).strip()[:80] or None if raw_company else None
 
     strengths = [str(s) for s in data.get("strengths", [])[:10]]
     gaps      = [str(g) for g in data.get("gaps", [])[:10]]
@@ -170,6 +174,7 @@ def run_analysis(resume_text: str, jd_text: str) -> dict:
         "fit_score":           score,
         "fit_badge":           _badge(score),
         "job_title":           job_title,
+        "company":             company,
         "strengths":           strengths,
         "gaps":                gaps,
         "matched_skills":      matched,

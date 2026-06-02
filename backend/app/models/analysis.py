@@ -57,6 +57,9 @@ class Analysis(db.Model):
     # Gemini at analysis time — no extra API call needed.
     job_title = db.Column(db.String(60), nullable=True)
 
+    # AI-extracted company name from the JD (e.g. "Google"). Null if not mentioned.
+    company = db.Column(db.String(80), nullable=True)
+
     # Relationship to Resume — lazy='joined' avoids N+1 when listing history.
     # nullable because resume_id uses SET NULL on delete.
     resume = db.relationship('Resume', foreign_keys=[resume_id], lazy='joined')
@@ -124,6 +127,7 @@ class Analysis(db.Model):
             "resume_id":            str(self.resume_id) if self.resume_id else None,
             "resume_filename":      self.resume.filename if self.resume else None,
             "job_title":            self.job_title,
+            "company":              self.company,
             "jd_snippet":           self.jd_snippet,
             "fit_score":            self.fit_score,
             "fit_badge":            self.fit_badge,
@@ -140,6 +144,7 @@ class Analysis(db.Model):
             "resume_id": str(self.resume_id) if self.resume_id else None,
             "resume_filename": self.resume.filename if self.resume else None,
             "job_title": self.job_title,
+            "company": self.company,
             "job_description": self.job_description,
             "jd_snippet": self.jd_snippet,
             "extracted_jd_skills": self.extracted_jd_skills,

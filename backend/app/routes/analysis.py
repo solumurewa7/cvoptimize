@@ -85,6 +85,7 @@ def create_analysis():
         resume_id=resume.id,
         job_description=jd_text,
         job_title=result.get("job_title"),
+        company=result.get("company"),
         jd_snippet=result["jd_snippet"],
         extracted_jd_skills=result.get("extracted_jd_skills", []),
         matched_skills=result.get("matched_skills", []),

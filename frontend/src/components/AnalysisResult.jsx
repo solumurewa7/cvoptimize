@@ -8,6 +8,13 @@ import ScoreRing from './ScoreRing'
 
 const EASE = [0.22, 1, 0.36, 1]
 
+function getRecommendation(score) {
+  if (score >= 75) return { label: 'Apply', color: 'var(--success)', bg: 'rgba(34,197,94,0.10)', border: 'rgba(34,197,94,0.30)', icon: '✓' }
+  if (score >= 50) return { label: 'Apply — address gaps first', color: 'var(--accent)',  bg: 'rgba(99,179,237,0.10)', border: 'rgba(99,179,237,0.30)', icon: '→' }
+  if (score >= 30) return { label: 'Improve before applying',    color: 'var(--warning)', bg: 'rgba(245,158,11,0.10)', border: 'rgba(245,158,11,0.30)', icon: '△' }
+  return               { label: 'May not meet requirements',     color: 'var(--danger)',  bg: 'rgba(239,68,68,0.10)',  border: 'rgba(239,68,68,0.30)',  icon: '✕' }
+}
+
 export default function AnalysisResult({ result }) {
   const badgeColor = { Strong: 'var(--success)', Medium: 'var(--warning)', Low: 'var(--danger)' }[result.fit_badge] || 'var(--text-secondary)'
   const badgeBg    = { Strong: 'rgba(34,197,94,0.1)', Medium: 'rgba(245,158,11,0.1)', Low: 'rgba(239,68,68,0.1)' }[result.fit_badge] || 'var(--navy-800)'
@@ -47,6 +54,24 @@ export default function AnalysisResult({ result }) {
               </span>
             )}
           </div>
+
+          {/* AI recommendation */}
+          {result.fit_score !== null && (() => {
+            const rec = getRecommendation(result.fit_score)
+            return (
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', gap: '7px',
+                background: rec.bg, border: `1px solid ${rec.border}`,
+                borderRadius: '8px', padding: '6px 14px', marginBottom: '12px',
+              }}>
+                <span style={{ fontSize: '0.75rem', color: rec.color, opacity: 0.8 }}>{rec.icon}</span>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: rec.color, letterSpacing: '0.01em' }}>
+                  AI Recommendation:
+                </span>
+                <span style={{ fontSize: '0.8rem', color: rec.color }}>{rec.label}</span>
+              </div>
+            )
+          })()}
 
           {/* Stats */}
           <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>

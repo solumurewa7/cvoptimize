@@ -235,6 +235,7 @@ function HistoryPanel() {
 // ─── History card ──────────────────────────────────────────────────────────────
 function HistoryCard({ analysis: a, delay = 0, onClick }) {
   const [hovered, setHovered] = useState(false)
+  const title = [a.job_title, a.company].filter(Boolean).join(' \u2014 ') || 'Job Analysis'
   const badgeColor = BADGE_COLOR[a.fit_badge] || 'var(--text-secondary)'
   const d    = new Date(a.created_at)
   const date = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -281,7 +282,7 @@ function HistoryCard({ analysis: a, delay = 0, onClick }) {
             color: 'var(--text-primary)', fontWeight: 700, fontSize: '0.825rem', margin: '0 0 2px',
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>
-            {a.job_title || 'Job Analysis'}
+            {title}
           </p>
           {a.jd_snippet && (
             <p style={{

@@ -117,7 +117,7 @@ function HistoryRow({ analysis: a, delay, onClick }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
           <p style={{ color: 'var(--text-primary)', fontWeight: 700, fontSize: '0.9rem', margin: 0 }}>
-            {a.job_title || 'Job Analysis'}
+            {[a.job_title, a.company].filter(Boolean).join(' \u2014 ') || 'Job Analysis'}
           </p>
           <span style={{
             background: `${badgeColor}18`, color: badgeColor,

@@ -62,7 +62,7 @@ export default function AnalysisDetailPage() {
                 History · Analysis
               </p>
               <h1 style={{ fontSize: 'clamp(1.3rem, 3vw, 1.7rem)', fontWeight: 800, letterSpacing: '-0.03em', color: 'var(--text-primary)', margin: '0 0 10px' }}>
-                {analysis.job_title || 'Job Analysis'}
+                {[analysis.job_title, analysis.company].filter(Boolean).join(' \u2014 ') || 'Job Analysis'}
               </h1>
               <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center' }}>
                 {analysis.resume_filename && (
