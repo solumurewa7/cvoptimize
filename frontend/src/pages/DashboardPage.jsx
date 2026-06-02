@@ -398,12 +398,23 @@ function ResumeCard({ resume, delay, onUse, onDelete, onPatched }) {
   const d = new Date(resume.created_at)
   const date = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
   const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-  const [editing, setEditing] = useState(false)
-  const [nameVal, setNameVal] = useState(resume.custom_name || '')
+
+  // Local state drives the UI immediately; parent is synced after API confirms.
+  const [localColor, setLocalColor] = useState(resume.color || null)
+  const [localName,  setLocalName]  = useState(resume.custom_name || '')
+  const [editing,    setEditing]    = useState(false)
+  const [nameVal,    setNameVal]    = useState(resume.custom_name || '')
   const nameInputRef = useRef(null)
 
-  const colorStyle = resume.color && RESUME_COLORS[resume.color]
-    ? { background: RESUME_COLORS[resume.color].bg, border: `1px solid ${RESUME_COLORS[resume.color].border}`, borderLeft: `3px solid ${RESUME_COLORS[resume.color].dot}` }
+  // Sync local state if parent swaps the resume object (e.g. after a delete/add)
+  useEffect(() => {
+    setLocalColor(resume.color || null)
+    setLocalName(resume.custom_name || '')
+    if (!editing) setNameVal(resume.custom_name || '')
+  }, [resume.id]) // only re-sync when the resume ID changes
+
+  const colorStyle = localColor && RESUME_COLORS[localColor]
+    ? { background: RESUME_COLORS[localColor].bg, border: `1px solid ${RESUME_COLORS[localColor].border}`, borderLeft: `3px solid ${RESUME_COLORS[localColor].dot}` }
     : { background: 'var(--navy-900)', border: '1px solid var(--navy-700)' }
 
   function openPreview() {
@@ -411,32 +422,30 @@ function ResumeCard({ resume, delay, onUse, onDelete, onPatched }) {
     window.open(`${base}/api/resumes/${resume.id}/file`, '_blank', 'noopener,noreferrer')
   }
 
-  async function patchColor(color) {
-    const newColor = color === resume.color ? null : color
-    const optimistic = { ...resume, color: newColor }
-    onPatched(optimistic)
+  async function patchColor(key) {
+    const newColor = key === localColor ? null : key
+    setLocalColor(newColor) // immediate local feedback
     try {
       const res = await client.patch(`/api/resumes/${resume.id}`, { color: newColor })
       onPatched(res.data.resume)
     } catch {
-      onPatched(resume) // roll back
-      toast.error('Could not update color')
+      setLocalColor(resume.color || null) // revert
+      toast.error('Could not save color')
     }
   }
 
   async function saveName() {
     setEditing(false)
     const newName = nameVal.trim() || null
-    if (newName === (resume.custom_name || null)) return
-    const optimistic = { ...resume, custom_name: newName }
-    onPatched(optimistic)
+    if (newName === (localName || null)) return
+    setLocalName(newName || '')
     try {
       const res = await client.patch(`/api/resumes/${resume.id}`, { custom_name: newName })
       onPatched(res.data.resume)
     } catch {
-      onPatched(resume)
+      setLocalName(resume.custom_name || '') // revert
       setNameVal(resume.custom_name || '')
-      toast.error('Could not update label')
+      toast.error('Could not save label')
     }
   }
 
@@ -444,7 +453,7 @@ function ResumeCard({ resume, delay, onUse, onDelete, onPatched }) {
     if (editing && nameInputRef.current) nameInputRef.current.focus()
   }, [editing])
 
-  const displayName = resume.custom_name || resume.filename
+  const displayName = localName || resume.filename
 
   return (
     <motion.div
@@ -552,9 +561,9 @@ function ResumeCard({ resume, delay, onUse, onDelete, onPatched }) {
               onClick={() => patchColor(key)}
               title={key}
               style={{
-                width: 12, height: 12, borderRadius: '50%',
+                width: 14, height: 14, borderRadius: '50%',
                 background: c.dot,
-                border: resume.color === key ? `2px solid #fff` : '2px solid transparent',
+                border: localColor === key ? `2px solid #fff` : '2px solid transparent',
                 padding: 0, cursor: 'pointer', flexShrink: 0,
                 outline: 'none', transition: 'transform 0.1s',
               }}
@@ -562,9 +571,9 @@ function ResumeCard({ resume, delay, onUse, onDelete, onPatched }) {
               onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
             />
           ))}
-          {resume.color && (
+          {localColor && (
             <button
-              onClick={() => patchColor(resume.color)}
+              onClick={() => patchColor(localColor)}
               title="Remove color"
               style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: '1px', fontSize: '0.65rem', lineHeight: 1, opacity: 0.6, transition: 'opacity 0.15s' }}
               onMouseEnter={e => e.currentTarget.style.opacity = '1'}
@@ -775,6 +784,7 @@ function VerificationBanner() {
 
 // ─── Upload modal ─────────────────────────────────────────────────────────────
 function UploadModal({ open, onClose, onUploaded }) {
+  const [pendingFile,  setPendingFile]  = useState(null)   // file chosen, not yet uploaded
   const [uploading,    setUploading]    = useState(false)
   const [error,        setError]        = useState('')
   const [customName,   setCustomName]   = useState('')
@@ -788,18 +798,27 @@ function UploadModal({ open, onClose, onUploaded }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [open, onClose])
 
-  // Reset state when modal reopens
+  // Reset all state when modal opens/closes
   useEffect(() => {
-    if (open) { setError(''); setCustomName(''); setPickedColor(null) }
+    if (!open) {
+      setPendingFile(null); setError(''); setCustomName(''); setPickedColor(null)
+    }
   }, [open])
 
-  const onDrop = useCallback(async (accepted) => {
+  // Step 1: just store the file — don't upload yet
+  const onDrop = useCallback((accepted) => {
     if (!accepted.length) return
-    const file = accepted[0]
+    setPendingFile(accepted[0])
+    setError('')
+  }, [])
+
+  // Step 2: user clicks "Save resume"
+  async function handleUpload() {
+    if (!pendingFile || uploading) return
     setError('')
     setUploading(true)
     const form = new FormData()
-    form.append('file', file)
+    form.append('file', pendingFile)
     if (customName.trim()) form.append('custom_name', customName.trim())
     if (pickedColor)       form.append('color', pickedColor)
     try {
@@ -813,7 +832,7 @@ function UploadModal({ open, onClose, onUploaded }) {
     } finally {
       setUploading(false)
     }
-  }, [onUploaded, customName, pickedColor])
+  }
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -871,26 +890,37 @@ function UploadModal({ open, onClose, onUploaded }) {
               <div
                 {...getRootProps()}
                 style={{
-                  border: `2px dashed ${isDragActive ? 'var(--accent)' : 'var(--navy-600)'}`,
+                  border: `2px dashed ${isDragActive ? 'var(--accent)' : pendingFile ? 'rgba(34,197,94,0.4)' : 'var(--navy-600)'}`,
                   borderRadius: '12px',
-                  padding: '40px 24px',
+                  padding: pendingFile ? '16px 20px' : '36px 24px',
                   textAlign: 'center',
                   cursor: uploading ? 'not-allowed' : 'pointer',
-                  background: isDragActive ? 'rgba(59,130,246,0.06)' : 'var(--navy-800)',
-                  transition: 'border-color 0.15s, background 0.15s',
+                  background: isDragActive ? 'rgba(59,130,246,0.06)' : pendingFile ? 'rgba(34,197,94,0.04)' : 'var(--navy-800)',
+                  transition: 'border-color 0.15s, background 0.15s, padding 0.2s',
                 }}
               >
                 <input {...getInputProps()} />
-
                 {uploading ? (
-                  <>
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round"
-                      style={{ animation: 'spin 0.8s linear infinite', margin: '0 auto 12px', display: 'block' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', padding: '6px 0' }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round"
+                      style={{ animation: 'spin 0.8s linear infinite', flexShrink: 0 }}>
                       <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
                     </svg>
                     <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', margin: 0 }}>Uploading…</p>
-                  </>
+                  </div>
+                ) : pendingFile ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--success)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    <span style={{ color: 'var(--success)', fontWeight: 600, fontSize: '0.875rem', flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {pendingFile.name}
+                    </span>
+                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', flexShrink: 0 }}>
+                      drop to replace
+                    </span>
+                  </div>
                 ) : (
                   <>
                     <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={isDragActive ? 'var(--accent)' : 'var(--text-secondary)'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
@@ -908,7 +938,7 @@ function UploadModal({ open, onClose, onUploaded }) {
                 )}
               </div>
 
-              {/* Optional label + color */}
+              {/* Label + color — always visible */}
               <div style={{ marginTop: '14px', display: 'flex', gap: '10px', alignItems: 'center' }}>
                 <input
                   value={customName}
@@ -916,6 +946,7 @@ function UploadModal({ open, onClose, onUploaded }) {
                   maxLength={100}
                   placeholder="Label (optional)"
                   disabled={uploading}
+                  onKeyDown={e => { if (e.key === 'Enter' && pendingFile) handleUpload() }}
                   style={{
                     flex: 1, background: 'var(--navy-800)', border: '1px solid var(--navy-600)',
                     borderRadius: '8px', color: 'var(--text-primary)', fontSize: '0.85rem',
@@ -943,6 +974,17 @@ function UploadModal({ open, onClose, onUploaded }) {
                   ))}
                 </div>
               </div>
+
+              {/* Upload button — appears once a file is selected */}
+              {pendingFile && !uploading && (
+                <button
+                  onClick={handleUpload}
+                  className="cv-btn"
+                  style={{ width: '100%', marginTop: '14px', justifyContent: 'center' }}
+                >
+                  Save resume →
+                </button>
+              )}
 
               {error && (
                 <div style={{ marginTop: '14px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', padding: '10px 14px', fontSize: '0.83rem', color: 'var(--danger)' }}>
