@@ -457,10 +457,6 @@ function ResumeCard({ resume, delay, onUse, onDelete }) {
           </p>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', margin: 0 }}>
             {resume.word_count?.toLocaleString()} words · {ext}
-            {resume.has_file
-              ? <span style={{ color: 'var(--accent)', marginLeft: '6px', opacity: 0.7 }}>· preview ↗</span>
-              : <span style={{ marginLeft: '6px', opacity: 0.5 }} title="Re-upload this file to enable preview">· no preview</span>
-            }
           </p>
         </div>
         <TrashButton onClick={(e) => { e.stopPropagation(); onDelete() }} />
