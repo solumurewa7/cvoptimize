@@ -1,38 +1,63 @@
 // context/AuthContext.jsx
-//
-// React Context that holds the logged-in user's data and auth actions.
-//
-// HOW CONTEXT WORKS (for reference):
-// - createContext() creates a "bucket" that any component can read from
-// - AuthProvider wraps the whole app and fills that bucket
-// - useAuth() is a hook any component calls to read/use what's in the bucket
-//
-// WHY context for auth?
-// Without it, you'd have to pass user/setUser as props through every component.
-// Context makes it available anywhere without "prop drilling".
 
 import { createContext, useContext, useState, useEffect } from 'react'
 import client from '../api/client'
 
 const AuthContext = createContext(null)
 
-export function AuthProvider({ children }) {
-  // null = not checked yet, false = checked and not logged in, object = user data
-  const [user, setUser] = useState(null)
-  const [loading, setLoading] = useState(true)  // true while we check /api/auth/me
+// ---------------------------------------------------------------------------
+// Cache helpers — store non-sensitive user profile in localStorage so the UI
+// can restore instantly on refresh while the server validates in the background.
+// The JWT itself stays in the httpOnly cookie — we never cache that.
+// ---------------------------------------------------------------------------
+const CACHE_KEY = 'cv_user'
 
-  // On first load, ask the server if we're already logged in.
-  // The JWT cookie is sent automatically (withCredentials: true).
+function readCache() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+function writeCache(user) {
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify(user)) } catch {}
+}
+
+function clearCache() {
+  try { localStorage.removeItem(CACHE_KEY) } catch {}
+}
+
+// ---------------------------------------------------------------------------
+
+export function AuthProvider({ children }) {
+  // Initialise from cache → instant restore, no loading flash
+  const cached = readCache()
+  const [user,    setUser]    = useState(cached)
+  // Skip the loading spinner if we already have a cached user
+  const [loading, setLoading] = useState(!cached)
+
   useEffect(() => {
+    // Always re-validate with the server in the background.
+    // On success: refresh the cache with the latest profile data.
+    // On failure (401 / network): clear cache and mark as logged out.
     client.get('/api/auth/me')
-      .then(res => setUser(res.data.user))
-      .catch(() => setUser(false))   // 401 = not logged in
+      .then(res => {
+        setUser(res.data.user)
+        writeCache(res.data.user)
+      })
+      .catch(() => {
+        setUser(false)
+        clearCache()
+      })
       .finally(() => setLoading(false))
   }, [])
 
   async function login(email, password) {
     const res = await client.post('/api/auth/login', { email, password })
     setUser(res.data.user)
+    writeCache(res.data.user)
     return res.data.user
   }
 
@@ -43,16 +68,19 @@ export function AuthProvider({ children }) {
       full_name: fullName,
     })
     setUser(res.data.user)
+    writeCache(res.data.user)
     return res.data.user
   }
 
   async function logout() {
     await client.post('/api/auth/logout')
     setUser(false)
+    clearCache()
   }
 
   function updateUser(data) {
     setUser(data)
+    writeCache(data)
   }
 
   return (
@@ -62,7 +90,6 @@ export function AuthProvider({ children }) {
   )
 }
 
-// Custom hook — components call useAuth() instead of useContext(AuthContext)
 export function useAuth() {
   return useContext(AuthContext)
 }
