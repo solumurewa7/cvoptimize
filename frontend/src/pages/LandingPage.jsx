@@ -1,21 +1,22 @@
 // pages/LandingPage.jsx — benefit-led marketing landing page
 
-import { useState, useEffect, useRef } from 'react'
+import { useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, useInView } from 'framer-motion'
 import Navbar from '../components/Navbar'
 import SEO from '../components/SEO'
 import ScoreRing from '../components/ScoreRing'
 import { useIsMobile } from '../hooks/useIsMobile'
+import { useTypewriter } from '../hooks/useTypewriter'
 import { useAuth } from '../context/AuthContext'
 
 const EASE = [0.22, 1, 0.36, 1]
-const ROLES = ['Software Engineer', 'Marketing Manager', 'Data Analyst', 'Product Designer', 'Nurse']
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function LandingPage() {
   const isMobile = useIsMobile()
   const { user } = useAuth()
+  const suffix = useTypewriter('ptimize', { typeMs: 100, deleteMs: 70, pauseFull: 2200, pauseEmpty: 600, loop: true })
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--navy-950)' }}>
@@ -44,6 +45,38 @@ export default function LandingPage() {
           background: 'radial-gradient(ellipse, rgba(59,130,246,0.1) 0%, transparent 65%)',
           pointerEvents: 'none',
         }} />
+
+        {/* Brand lockup */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '22px' }}
+        >
+          <div style={{
+            width: 40, height: 40, borderRadius: '11px',
+            background: 'linear-gradient(135deg, var(--accent) 0%, #1d4ed8 100%)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 4px 16px rgba(59,130,246,0.4)', flexShrink: 0,
+          }}>
+            <svg width="22" height="22" viewBox="0 0 16 16" fill="none">
+              <rect x="2" y="2" width="5" height="6" rx="1.2" fill="white" opacity="0.9"/>
+              <rect x="9" y="2" width="5" height="3" rx="1.2" fill="white" opacity="0.6"/>
+              <rect x="9" y="7" width="5" height="3" rx="1.2" fill="white" opacity="0.6"/>
+              <rect x="2" y="10" width="12" height="1.5" rx="0.75" fill="white" opacity="0.4"/>
+              <rect x="2" y="13" width="8" height="1.5" rx="0.75" fill="white" opacity="0.4"/>
+            </svg>
+          </div>
+          <span style={{ fontSize: 'clamp(1.5rem, 4vw, 1.9rem)', fontWeight: 800, letterSpacing: '-0.03em', color: 'var(--text-primary)', lineHeight: 1 }}>
+            CVO<span style={{ color: 'var(--accent)' }}>{suffix}</span>
+            <span style={{
+              display: 'inline-block', width: '3px', height: '0.78em',
+              background: 'var(--accent)', marginLeft: '2px', verticalAlign: 'middle',
+              borderRadius: '1px', animation: 'blink 1s step-end infinite',
+            }} />
+            <style>{`@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }`}</style>
+          </span>
+        </motion.div>
 
         {/* Badge */}
         <motion.div
@@ -81,11 +114,7 @@ export default function LandingPage() {
           }}
         >
           Land more interviews, match your<br />
-          CV to any{' '}
-          <span style={{ color: 'var(--accent)' }}>
-            <TypeCycle words={ROLES} />
-          </span>
-          {' '}role in seconds.
+          CV to any role in seconds.
         </motion.h1>
 
         {/* Tagline */}
@@ -153,45 +182,6 @@ export default function LandingPage() {
       {/* ── Footer ────────────────────────────────────────────────────────── */}
       <Footer />
     </div>
-  )
-}
-
-// ─── Rotating typewriter for the headline role ────────────────────────────────
-function TypeCycle({ words }) {
-  const [index, setIndex] = useState(0)
-  const [text, setText] = useState('')
-  const [phase, setPhase] = useState('typing') // typing | pausing | deleting
-
-  useEffect(() => {
-    const full = words[index]
-    let timer
-    if (phase === 'typing') {
-      if (text.length < full.length) {
-        timer = setTimeout(() => setText(full.slice(0, text.length + 1)), 80)
-      } else {
-        timer = setTimeout(() => setPhase('deleting'), 2400)
-      }
-    } else if (phase === 'deleting') {
-      if (text.length > 0) {
-        timer = setTimeout(() => setText(full.slice(0, text.length - 1)), 110)
-      } else {
-        setIndex(i => (i + 1) % words.length)
-        setPhase('typing')
-      }
-    }
-    return () => clearTimeout(timer)
-  }, [text, phase, index, words])
-
-  return (
-    <>
-      {text}
-      <span style={{
-        display: 'inline-block', width: '3px', height: '0.85em',
-        background: 'var(--accent)', marginLeft: '2px', verticalAlign: 'middle',
-        borderRadius: '1px', animation: 'blink 1s step-end infinite',
-      }} />
-      <style>{`@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }`}</style>
-    </>
   )
 }
 
