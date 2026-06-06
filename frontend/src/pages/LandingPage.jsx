@@ -80,7 +80,7 @@ export default function LandingPage() {
             maxWidth: '760px',
           }}
         >
-          Land more interviews — match your<br />
+          Land more interviews, match your<br />
           CV to any{' '}
           <span style={{ color: 'var(--accent)' }}>
             <TypeCycle words={ROLES} />
@@ -167,13 +167,13 @@ function TypeCycle({ words }) {
     let timer
     if (phase === 'typing') {
       if (text.length < full.length) {
-        timer = setTimeout(() => setText(full.slice(0, text.length + 1)), 70)
+        timer = setTimeout(() => setText(full.slice(0, text.length + 1)), 80)
       } else {
-        timer = setTimeout(() => setPhase('deleting'), 1600)
+        timer = setTimeout(() => setPhase('deleting'), 2400)
       }
     } else if (phase === 'deleting') {
       if (text.length > 0) {
-        timer = setTimeout(() => setText(full.slice(0, text.length - 1)), 40)
+        timer = setTimeout(() => setText(full.slice(0, text.length - 1)), 110)
       } else {
         setIndex(i => (i + 1) % words.length)
         setPhase('typing')
