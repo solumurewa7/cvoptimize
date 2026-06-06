@@ -80,7 +80,7 @@ export default function LandingPage() {
             maxWidth: '760px',
           }}
         >
-          Land more interviews — match your<br />
+          Land more interviews, match your<br />
           CV to any{' '}
           <span style={{ color: 'var(--accent)' }}>
             <TypeCycle words={ROLES} />

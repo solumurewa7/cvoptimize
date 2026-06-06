@@ -5,6 +5,7 @@
 
 import { motion } from 'framer-motion'
 import ScoreRing from './ScoreRing'
+import NextSteps from './NextSteps'
 
 const EASE = [0.22, 1, 0.36, 1]
 
@@ -185,6 +186,9 @@ export default function AnalysisResult({ result }) {
           </p>
         </div>
       )}
+
+      {/* ── Recommended next steps ── */}
+      <NextSteps variant="match" />
     </div>
   )
 }

@@ -15,6 +15,7 @@ import Navbar from '../components/Navbar'
 import SEO from '../components/SEO'
 import ScoreRing from '../components/ScoreRing'
 import AnalysisProgress from '../components/AnalysisProgress'
+import NextSteps from '../components/NextSteps'
 import { useAuth } from '../context/AuthContext'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { RESUME_COLORS } from '../utils/resumeColors'
@@ -585,6 +586,9 @@ function ImprovementResult({ result }) {
           </ul>
         </ResultCard>
       )}
+
+      {/* ── Recommended next steps ── */}
+      <NextSteps variant="improve" />
     </div>
   )
 }

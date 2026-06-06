@@ -23,7 +23,7 @@ export default function PrivacyPage() {
             Privacy Policy
           </h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: '0 0 48px' }}>
-            Last updated: April 2026
+            Last updated: June 2026
           </p>
 
           <LegalSection title="1. What We Collect">
@@ -85,11 +85,15 @@ export default function PrivacyPage() {
             CVOptimize is not intended for use by individuals under the age of 13. We do not knowingly collect personal information from children under 13. If you believe a child has provided us with personal information, please contact us so we can delete it.
           </LegalSection>
 
-          <LegalSection title="9. Changes to This Policy">
+          <LegalSection title="9. Affiliate Links">
+            Some pages (such as your analysis results) may contain <strong style={{ color: 'var(--text-primary)' }}>affiliate links</strong> to third-party products and services we think may help your job search. If you click one and make a purchase, we may earn a commission at no extra cost to you. These links are clearly labelled, and we only recommend services relevant to resumes and careers. We do not share your personal data with these third parties.
+          </LegalSection>
+
+          <LegalSection title="10. Changes to This Policy">
             We may update this Privacy Policy from time to time. We will indicate the date of the most recent update at the top of this page. Your continued use of the Service after changes are posted constitutes your acceptance of the updated policy.
           </LegalSection>
 
-          <LegalSection title="10. Contact">
+          <LegalSection title="11. Contact">
             If you have any questions or concerns about this Privacy Policy or your data, please open an issue on our{' '}
             <a href="https://github.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', textDecoration: 'none' }}>GitHub repository</a>.
           </LegalSection>
