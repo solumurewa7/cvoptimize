@@ -1,22 +1,21 @@
 // pages/LandingPage.jsx — benefit-led marketing landing page
 
-import { useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, useInView } from 'framer-motion'
 import Navbar from '../components/Navbar'
 import SEO from '../components/SEO'
 import ScoreRing from '../components/ScoreRing'
 import { useIsMobile } from '../hooks/useIsMobile'
-import { useTypewriter } from '../hooks/useTypewriter'
 import { useAuth } from '../context/AuthContext'
 
 const EASE = [0.22, 1, 0.36, 1]
+const ROLES = ['Software Engineer', 'Marketing Manager', 'Data Analyst', 'Product Designer', 'Nurse']
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function LandingPage() {
   const isMobile = useIsMobile()
   const { user } = useAuth()
-  const suffix = useTypewriter('ptimize', { typeMs: 100, deleteMs: 70, pauseFull: 2200, pauseEmpty: 600, loop: true })
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--navy-950)' }}>
@@ -29,11 +28,13 @@ export default function LandingPage() {
 
       {/* ── Hero ──────────────────────────────────────────────────────────── */}
       <section style={{
+        minHeight: 'calc(100vh - 60px)',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
+        justifyContent: 'center',
         textAlign: 'center',
-        padding: isMobile ? '40px 16px 8px' : '72px 24px 16px',
+        padding: isMobile ? '32px 16px 76px' : '40px 24px 92px',
         position: 'relative',
         overflow: 'hidden',
       }}>
@@ -46,38 +47,6 @@ export default function LandingPage() {
           pointerEvents: 'none',
         }} />
 
-        {/* Brand lockup */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '22px' }}
-        >
-          <div style={{
-            width: 40, height: 40, borderRadius: '11px',
-            background: 'linear-gradient(135deg, var(--accent) 0%, #1d4ed8 100%)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 4px 16px rgba(59,130,246,0.4)', flexShrink: 0,
-          }}>
-            <svg width="22" height="22" viewBox="0 0 16 16" fill="none">
-              <rect x="2" y="2" width="5" height="6" rx="1.2" fill="white" opacity="0.9"/>
-              <rect x="9" y="2" width="5" height="3" rx="1.2" fill="white" opacity="0.6"/>
-              <rect x="9" y="7" width="5" height="3" rx="1.2" fill="white" opacity="0.6"/>
-              <rect x="2" y="10" width="12" height="1.5" rx="0.75" fill="white" opacity="0.4"/>
-              <rect x="2" y="13" width="8" height="1.5" rx="0.75" fill="white" opacity="0.4"/>
-            </svg>
-          </div>
-          <span style={{ fontSize: 'clamp(1.5rem, 4vw, 1.9rem)', fontWeight: 800, letterSpacing: '-0.03em', color: 'var(--text-primary)', lineHeight: 1 }}>
-            CVO<span style={{ color: 'var(--accent)' }}>{suffix}</span>
-            <span style={{
-              display: 'inline-block', width: '3px', height: '0.78em',
-              background: 'var(--accent)', marginLeft: '2px', verticalAlign: 'middle',
-              borderRadius: '1px', animation: 'blink 1s step-end infinite',
-            }} />
-            <style>{`@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }`}</style>
-          </span>
-        </motion.div>
-
         {/* Badge */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -89,7 +58,7 @@ export default function LandingPage() {
             border: '1px solid rgba(59,130,246,0.25)',
             borderRadius: '999px',
             padding: '5px 14px',
-            marginBottom: '28px',
+            marginBottom: '32px',
           }}
         >
           <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--accent)', boxShadow: '0 0 6px var(--accent)' }} />
@@ -98,40 +67,41 @@ export default function LandingPage() {
           </span>
         </motion.div>
 
-        {/* Benefit headline */}
+        {/* Brand wordmark — the hero header */}
         <motion.h1
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.55, delay: 0.15, ease: EASE }}
           style={{
-            fontSize: 'clamp(2.2rem, 6vw, 4rem)',
+            fontSize: 'clamp(3rem, 8vw, 5.5rem)',
             fontWeight: 800,
-            letterSpacing: '-0.035em',
-            lineHeight: 1.08,
-            margin: '0 0 22px',
+            letterSpacing: '-0.04em',
+            lineHeight: 1.05,
+            margin: '0 0 24px',
             color: 'var(--text-primary)',
-            maxWidth: '760px',
           }}
         >
-          Land more interviews, match your<br />
-          CV to any role in seconds.
+          CVO<span style={{ color: 'var(--accent)' }}>ptimize</span>
         </motion.h1>
 
-        {/* Tagline */}
+        {/* Sub-message with rotating role */}
         <motion.p
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.3, ease: EASE }}
           style={{
-            fontSize: 'clamp(1rem, 2.5vw, 1.2rem)',
+            fontSize: 'clamp(1.05rem, 2.5vw, 1.3rem)',
             color: 'var(--text-secondary)',
-            maxWidth: '520px',
-            lineHeight: 1.65,
-            margin: '0 0 36px',
+            maxWidth: '560px',
+            lineHeight: 1.6,
+            margin: '0 0 38px',
           }}
         >
-          Upload your resume, paste a job description, and get an instant AI fit
-          score with the exact skills you match and miss.
+          Land more interviews, match your CV to any{' '}
+          <span style={{ color: 'var(--accent)', fontWeight: 600 }}>
+            <TypeCycle words={ROLES} />
+          </span>
+          {' '}role in seconds.
         </motion.p>
 
         {/* CTA buttons */}
@@ -162,6 +132,20 @@ export default function LandingPage() {
             </>
           )}
         </motion.div>
+
+        {/* Scroll cue */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 0.45 }}
+          transition={{ duration: 0.6, delay: 0.9 }}
+          style={{ position: 'absolute', bottom: '28px', left: '50%', transform: 'translateX(-50%)', pointerEvents: 'none' }}
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+            style={{ animation: 'bounceDown 1.8s ease-in-out infinite' }}>
+            <style>{`@keyframes bounceDown { 0%,100%{transform:translateY(0)} 50%{transform:translateY(6px)} }`}</style>
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </motion.div>
       </section>
 
       {/* ── Product preview ───────────────────────────────────────────────── */}
@@ -182,6 +166,45 @@ export default function LandingPage() {
       {/* ── Footer ────────────────────────────────────────────────────────── */}
       <Footer />
     </div>
+  )
+}
+
+// ─── Rotating typewriter for the sub-message role ─────────────────────────────
+function TypeCycle({ words }) {
+  const [index, setIndex] = useState(0)
+  const [text, setText] = useState('')
+  const [phase, setPhase] = useState('typing') // typing | deleting
+
+  useEffect(() => {
+    const full = words[index]
+    let timer
+    if (phase === 'typing') {
+      if (text.length < full.length) {
+        timer = setTimeout(() => setText(full.slice(0, text.length + 1)), 80)
+      } else {
+        timer = setTimeout(() => setPhase('deleting'), 2200)
+      }
+    } else if (phase === 'deleting') {
+      if (text.length > 0) {
+        timer = setTimeout(() => setText(full.slice(0, text.length - 1)), 45)
+      } else {
+        setIndex(i => (i + 1) % words.length)
+        setPhase('typing')
+      }
+    }
+    return () => clearTimeout(timer)
+  }, [text, phase, index, words])
+
+  return (
+    <>
+      {text}
+      <span style={{
+        display: 'inline-block', width: '2px', height: '1em',
+        background: 'var(--accent)', marginLeft: '2px', verticalAlign: 'text-bottom',
+        borderRadius: '1px', animation: 'blink 1s step-end infinite',
+      }} />
+      <style>{`@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }`}</style>
+    </>
   )
 }
 
