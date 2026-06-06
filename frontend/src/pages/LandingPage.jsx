@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { motion, useInView } from 'framer-motion'
+import { motion, AnimatePresence, useInView } from 'framer-motion'
 import Navbar from '../components/Navbar'
 import SEO from '../components/SEO'
 import ScoreRing from '../components/ScoreRing'
@@ -152,16 +152,13 @@ export default function LandingPage() {
       <ProductPreview isMobile={isMobile} />
 
       {/* ── How it works ──────────────────────────────────────────────────── */}
-      <HowItWorks isMobile={isMobile} />
+      <HowItWorks isMobile={isMobile} user={user} />
 
       {/* ── Feature cards ─────────────────────────────────────────────────── */}
       <FeatureCards isMobile={isMobile} />
 
       {/* ── Trust row ─────────────────────────────────────────────────────── */}
       <TrustRow isMobile={isMobile} />
-
-      {/* ── Final CTA ─────────────────────────────────────────────────────── */}
-      <FinalCTA isMobile={isMobile} user={user} />
 
       {/* ── Footer ────────────────────────────────────────────────────────── */}
       <Footer />
@@ -225,23 +222,67 @@ function Reveal({ children, delay = 0, style }) {
   )
 }
 
-// ─── Product preview (example result mockup) ──────────────────────────────────
-const MATCHED = ['Python', 'Flask', 'PostgreSQL', 'REST APIs', 'AWS']
-const MISSING = ['Kubernetes', 'GraphQL']
+// ─── Product preview (rotating example results) ───────────────────────────────
+const BADGE = {
+  Strong: { color: 'var(--success)', bg: 'rgba(34,197,94,0.1)',  border: 'rgba(34,197,94,0.25)' },
+  Medium: { color: 'var(--warning)', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.25)' },
+  Low:    { color: 'var(--danger)',  bg: 'rgba(239,68,68,0.1)',  border: 'rgba(239,68,68,0.25)' },
+}
+
+// Everyday roles — so visitors from any field can relate, not just tech.
+const EXAMPLES = [
+  { title: 'Registered Nurse', score: 88, badge: 'Strong',
+    blurb: 'Your clinical experience and patient-care background line up strongly with this ward role.',
+    matched: ['Patient Care', 'Medication Admin', 'IV Therapy', 'EHR Charting'], missing: ['Pediatric Care', 'ACLS Cert'] },
+  { title: 'Primary School Teacher', score: 76, badge: 'Strong',
+    blurb: 'Your classroom experience fits well — just a couple of curriculum specifics to add.',
+    matched: ['Lesson Planning', 'Classroom Management', 'Differentiation'], missing: ['SEN Experience', 'Phonics Cert'] },
+  { title: 'Retail Store Manager', score: 71, badge: 'Strong',
+    blurb: 'Strong people-management and sales background, with a few inventory-system gaps.',
+    matched: ['Team Leadership', 'Merchandising', 'Sales Targets', 'Rota Planning'], missing: ['Loss Prevention', 'SAP Retail'] },
+  { title: 'Marketing Manager', score: 64, badge: 'Medium',
+    blurb: 'Good campaign experience — the role leans more on paid ads and analytics than your CV shows.',
+    matched: ['Content Strategy', 'Social Media', 'Brand Campaigns'], missing: ['Google Ads', 'SEO', 'HubSpot'] },
+  { title: 'Accountant', score: 82, badge: 'Strong',
+    blurb: 'Your bookkeeping and reporting experience map closely to this finance role.',
+    matched: ['Reconciliation', 'Financial Reporting', 'Excel', 'VAT Returns'], missing: ['SAP', 'IFRS'] },
+  { title: 'Customer Service Rep', score: 79, badge: 'Strong',
+    blurb: 'Your support background and communication skills fit the role well.',
+    matched: ['Conflict Resolution', 'CRM Software', 'Live Chat', 'Phone Support'], missing: ['Spanish (Fluent)', 'Zendesk'] },
+  { title: 'Graphic Designer', score: 68, badge: 'Medium',
+    blurb: 'Solid design portfolio — the role also wants motion and web skills you haven’t listed yet.',
+    matched: ['Photoshop', 'Illustrator', 'Branding', 'Typography'], missing: ['After Effects', 'Figma', 'HTML/CSS'] },
+  { title: 'Software Engineer', score: 92, badge: 'Strong',
+    blurb: 'Your backend and API experience aligns closely with the role’s core requirements.',
+    matched: ['Python', 'REST APIs', 'PostgreSQL', 'AWS'], missing: ['Kubernetes', 'GraphQL'] },
+]
 
 function ProductPreview({ isMobile }) {
+  const [idx, setIdx] = useState(() => Math.floor(Math.random() * EXAMPLES.length))
+  const [paused, setPaused] = useState(false)
+
+  useEffect(() => {
+    if (paused) return
+    const id = setInterval(() => setIdx(i => (i + 1) % EXAMPLES.length), 4500)
+    return () => clearInterval(id)
+  }, [paused])
+
+  const ex = EXAMPLES[idx]
+  const b = BADGE[ex.badge] || BADGE.Strong
+
   return (
     <section style={{ maxWidth: '720px', margin: '0 auto', padding: isMobile ? '24px 16px 8px' : '40px 24px 16px' }}>
       <Reveal>
-        <div style={{
-          background: 'var(--navy-900)',
-          border: '1px solid var(--navy-700)',
-          borderRadius: '18px',
-          padding: isMobile ? '20px 18px' : '28px 32px',
-          boxShadow: '0 24px 60px rgba(0,0,0,0.35)',
-          position: 'relative',
-          overflow: 'hidden',
-        }}>
+        <div
+          onMouseEnter={() => setPaused(true)}
+          onMouseLeave={() => setPaused(false)}
+          style={{
+            background: 'var(--navy-900)', border: '1px solid var(--navy-700)',
+            borderRadius: '18px', padding: isMobile ? '20px 18px' : '28px 32px',
+            boxShadow: '0 24px 60px rgba(0,0,0,0.35)', position: 'relative', overflow: 'hidden',
+            minHeight: isMobile ? '340px' : '260px',
+          }}
+        >
           <span style={{
             position: 'absolute', top: 16, right: 18,
             color: 'var(--text-secondary)', fontSize: '0.68rem', fontWeight: 600,
@@ -250,31 +291,49 @@ function ProductPreview({ isMobile }) {
             Example result
           </span>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '20px' : '28px', flexWrap: 'wrap' }}>
-            <ScoreRing score={92} badge="Strong" />
-            <div style={{ flex: 1, minWidth: '220px' }}>
-              <p style={{ color: 'var(--text-primary)', fontSize: '1.4rem', fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 6px' }}>
-                92% fit
-              </p>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={idx}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.35, ease: EASE }}
+            >
+              {/* Role chip — makes it clear this works for any field */}
               <span style={{
-                display: 'inline-block',
-                background: 'rgba(34,197,94,0.1)', color: 'var(--success)',
-                border: '1px solid rgba(34,197,94,0.25)', borderRadius: '999px',
-                padding: '3px 12px', fontSize: '0.78rem', fontWeight: 600, marginBottom: '12px',
+                display: 'inline-block', background: 'var(--navy-800)', border: '1px solid var(--navy-700)',
+                color: 'var(--text-secondary)', borderRadius: '999px', padding: '3px 12px',
+                fontSize: '0.74rem', fontWeight: 600, marginBottom: '16px',
               }}>
-                Strong match
+                {ex.title}
               </span>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', lineHeight: 1.6, margin: 0 }}>
-                Your backend experience and REST API work align closely with the role's core requirements.
-              </p>
-            </div>
-          </div>
 
-          {/* Skill chips */}
-          <div style={{ marginTop: '20px', display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '16px' }}>
-            <SkillGroup title="Matched skills" color="var(--success)" items={MATCHED} />
-            <SkillGroup title="Missing skills" color="var(--warning)" items={MISSING} />
-          </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '20px' : '28px', flexWrap: 'wrap' }}>
+                <ScoreRing score={ex.score} badge={ex.badge} />
+                <div style={{ flex: 1, minWidth: '220px' }}>
+                  <p style={{ color: 'var(--text-primary)', fontSize: '1.4rem', fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 6px' }}>
+                    {ex.score}% fit
+                  </p>
+                  <span style={{
+                    display: 'inline-block', background: b.bg, color: b.color,
+                    border: `1px solid ${b.border}`, borderRadius: '999px',
+                    padding: '3px 12px', fontSize: '0.78rem', fontWeight: 600, marginBottom: '12px',
+                  }}>
+                    {ex.badge} match
+                  </span>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', lineHeight: 1.6, margin: 0 }}>
+                    {ex.blurb}
+                  </p>
+                </div>
+              </div>
+
+              {/* Skill chips */}
+              <div style={{ marginTop: '20px', display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '16px' }}>
+                <SkillGroup title="Matched skills" color="var(--success)" items={ex.matched} />
+                <SkillGroup title="Missing skills" color="var(--warning)" items={ex.missing} />
+              </div>
+            </motion.div>
+          </AnimatePresence>
         </div>
       </Reveal>
     </section>
@@ -302,13 +361,15 @@ function SkillGroup({ title, color, items }) {
 }
 
 // ─── How it works ─────────────────────────────────────────────────────────────
+const JD_SAMPLE = 'Registered Nurse — deliver compassionate patient care, administer medications, and monitor vital signs…'
+
 const STEPS = [
-  { n: 1, title: 'Upload your CV', desc: 'Drop in a PDF or DOCX — no account needed to start.' },
-  { n: 2, title: 'Paste the job description', desc: 'Add the role you’re targeting, responsibilities and all.' },
-  { n: 3, title: 'Get your fit score', desc: 'See your match score, strengths, gaps, and skills in seconds.' },
+  { n: 1, type: 'link', title: 'Upload your CV', desc: 'Drop in a PDF or DOCX — no account needed to start.' },
+  { n: 2, type: 'jd',   title: 'Paste the job description', desc: 'Add the role you’re targeting, responsibilities and all.' },
+  { n: 3, type: 'ring', title: 'Get your fit score', desc: 'See your match score, strengths, gaps, and skills in seconds.' },
 ]
 
-function HowItWorks({ isMobile }) {
+function HowItWorks({ isMobile, user }) {
   return (
     <section style={{ maxWidth: '900px', margin: '0 auto', padding: isMobile ? '36px 16px' : '64px 24px' }}>
       <Reveal>
@@ -317,28 +378,106 @@ function HowItWorks({ isMobile }) {
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: '16px' }}>
         {STEPS.map((s, i) => (
           <Reveal key={s.n} delay={i * 0.08}>
-            <div className="cv-card" style={{ padding: '24px 22px', height: '100%' }}>
-              <div style={{
-                width: 32, height: 32, borderRadius: '9px',
-                background: 'linear-gradient(135deg, var(--accent) 0%, #1d4ed8 100%)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '0.85rem', fontWeight: 700, color: '#fff', marginBottom: '14px',
-                boxShadow: '0 2px 10px rgba(59,130,246,0.3)',
-              }}>
-                {s.n}
-              </div>
-              <h3 style={{ color: 'var(--text-primary)', fontSize: '1rem', fontWeight: 700, margin: '0 0 8px', letterSpacing: '-0.01em' }}>
-                {s.title}
-              </h3>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', lineHeight: 1.6, margin: 0 }}>
-                {s.desc}
-              </p>
-            </div>
+            <HowStep step={s} isMobile={isMobile} user={user} />
           </Reveal>
         ))}
       </div>
+      <p style={{ color: 'var(--text-secondary)', fontSize: '0.74rem', textAlign: 'center', margin: '16px 0 0', opacity: 0.55 }}>
+        {isMobile ? 'Tap a step to preview it.' : 'Hover a step to preview it.'}
+      </p>
     </section>
   )
+}
+
+function HowStep({ step, isMobile, user }) {
+  const [open, setOpen] = useState(false)
+  const [ring, setRing] = useState(88)
+
+  const show = () => {
+    if (step.type === 'ring') setRing(80 + Math.floor(Math.random() * 19)) // 80–98
+    setOpen(true)
+  }
+  const hide = () => setOpen(false)
+
+  const interactive = step.type !== 'link'
+  const handlers = !interactive ? {}
+    : isMobile ? { onClick: () => (open ? hide() : show()) }
+    : { onMouseEnter: show, onMouseLeave: hide }
+
+  const card = (
+    <div
+      className="cv-card"
+      {...handlers}
+      style={{
+        padding: '24px 22px', height: '100%', minHeight: '184px',
+        position: 'relative', overflow: 'hidden',
+        cursor: (step.type === 'link' || isMobile) ? 'pointer' : 'default',
+      }}
+    >
+      <div style={{
+        width: 32, height: 32, borderRadius: '9px',
+        background: 'linear-gradient(135deg, var(--accent) 0%, #1d4ed8 100%)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: '0.85rem', fontWeight: 700, color: '#fff', marginBottom: '14px',
+        boxShadow: '0 2px 10px rgba(59,130,246,0.3)',
+      }}>
+        {step.n}
+      </div>
+      <h3 style={{ color: 'var(--text-primary)', fontSize: '1rem', fontWeight: 700, margin: '0 0 8px', letterSpacing: '-0.01em', display: 'flex', alignItems: 'center', gap: '6px' }}>
+        {step.title}
+        {step.type === 'link' && (
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+          </svg>
+        )}
+      </h3>
+      <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', lineHeight: 1.6, margin: 0 }}>
+        {step.desc}
+      </p>
+
+      <AnimatePresence>
+        {open && interactive && (
+          <motion.div
+            key="ov"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            style={{
+              position: 'absolute', inset: 0, background: 'var(--navy-900)',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              gap: '8px', padding: '18px', textAlign: 'center',
+            }}
+          >
+            {step.type === 'jd' ? (
+              <>
+                <span style={{ color: 'var(--accent)', fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                  Example job description
+                </span>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', lineHeight: 1.55, margin: 0, fontStyle: 'italic' }}>
+                  “{JD_SAMPLE}”
+                </p>
+              </>
+            ) : (
+              <>
+                <ScoreRing score={ring} badge="Strong" />
+                <span style={{ color: 'var(--text-secondary)', fontSize: '0.76rem' }}>e.g. {ring}% fit</span>
+              </>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+
+  if (step.type === 'link') {
+    return (
+      <Link to={user ? '/dashboard' : '/analyze'} style={{ textDecoration: 'none', display: 'block', height: '100%' }}>
+        {card}
+      </Link>
+    )
+  }
+  return card
 }
 
 // ─── Feature cards ────────────────────────────────────────────────────────────
@@ -351,8 +490,8 @@ function FeatureCards({ isMobile }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '20px' }}>
         <Reveal>
           <FeatureCard
-            icon={<SearchIcon />} accentColor="var(--accent)" glowColor="rgba(59,130,246,0.12)"
-            tag="Available now" tagColor="var(--accent)" title="Job Match"
+            icon={<SearchIcon />} accentColor="var(--success)" glowColor="rgba(34,197,94,0.10)"
+            tag="Available now" tagColor="var(--success)" title="Job Match"
             description="Paste a job description and get an instant AI fit score — see exactly which skills you have, which are implied, and what's missing."
             cta={<Link to="/analyze" className="cv-btn" style={{ textDecoration: 'none', fontSize: '0.9rem', padding: '10px 22px' }}>Check my fit →</Link>}
           />
@@ -395,34 +534,6 @@ function TrustRow({ isMobile }) {
               <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', fontWeight: 500 }}>{t}</span>
             </div>
           ))}
-        </div>
-      </Reveal>
-    </section>
-  )
-}
-
-// ─── Final CTA band ───────────────────────────────────────────────────────────
-function FinalCTA({ isMobile, user }) {
-  return (
-    <section style={{ maxWidth: '860px', margin: '0 auto', padding: isMobile ? '0 16px 56px' : '0 24px 80px' }}>
-      <Reveal>
-        <div style={{
-          background: 'linear-gradient(135deg, rgba(59,130,246,0.12) 0%, rgba(29,78,216,0.1) 100%)',
-          border: '1px solid rgba(59,130,246,0.22)',
-          borderRadius: '20px',
-          padding: isMobile ? '32px 22px' : '48px 40px',
-          textAlign: 'center',
-        }}>
-          <h2 style={{ color: 'var(--text-primary)', fontSize: 'clamp(1.4rem, 3.5vw, 2rem)', fontWeight: 800, letterSpacing: '-0.03em', margin: '0 0 10px' }}>
-            Ready to check your fit?
-          </h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', margin: '0 0 26px', maxWidth: '440px', marginInline: 'auto', lineHeight: 1.6 }}>
-            See how your resume stacks up against any role — in seconds, for free.
-          </p>
-          <Link to={user ? '/dashboard' : '/analyze'} className="cv-btn"
-            style={{ textDecoration: 'none', padding: '14px 34px', fontSize: '1rem', boxShadow: '0 4px 24px rgba(59,130,246,0.35)' }}>
-            {user ? 'Go to Dashboard →' : 'Check my fit — it’s free'}
-          </Link>
         </div>
       </Reveal>
     </section>
