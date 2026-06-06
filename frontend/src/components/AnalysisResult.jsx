@@ -50,7 +50,7 @@ export default function AnalysisResult({ result }) {
                 borderRadius: '999px', padding: '3px 12px',
                 fontSize: '0.78rem', fontWeight: 600, letterSpacing: '0.02em',
               }}>
-                {result.fit_badge} match
+                {result.fit_badge === 'Low' ? 'Limited' : result.fit_badge} match
               </span>
             )}
           </div>

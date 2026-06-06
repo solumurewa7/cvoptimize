@@ -27,11 +27,11 @@ from .ai_client import generate, AIServiceError
 def _badge(score: int) -> str:
     if score >= 85:
         return "Excellent"
-    if score >= 65:
-        return "Good"
-    if score >= 40:
-        return "Fair"
-    return "Poor"
+    if score >= 70:
+        return "Strong"
+    if score >= 50:
+        return "Developing"
+    return "Needs work"
 
 
 # ---------------------------------------------------------------------------
@@ -39,59 +39,73 @@ def _badge(score: int) -> str:
 # ---------------------------------------------------------------------------
 
 _PROMPT_TEMPLATE = """
-You are an expert CV coach, recruiter, and ATS specialist with 15+ years of experience reviewing thousands of resumes across all industries.
+You are an expert CV coach who has reviewed thousands of resumes across every industry — healthcare, education, trades, retail, finance, creative, tech and more.
 
 Read the following resume carefully and completely.
 
 === RESUME ===
 {resume_text}
 
-=== TASK ===
-Analyse this resume on its own merits — NOT against any specific job description. Evaluate it holistically for:
-- Quality and impact of language (action verbs, specificity, quantified achievements)
-- Structure and completeness (sections present, logical order, appropriate length)
-- ATS (Applicant Tracking System) friendliness (keywords, formatting, parsability)
-- Professional tone and clarity
-- Presence of key sections (summary/objective, experience, education, skills, etc.)
+=== HOW TO EVALUATE ===
+First, infer the candidate's field/industry and seniority from the content. Judge the resume by the STANDARDS OF ITS OWN FIELD — never impose conventions from an unrelated field (for example, never expect software keywords or GitHub links on a nurse's, teacher's, or retail manager's resume).
 
-Scoring guide:
-- 85-100: Excellent — near-publication ready, minor polishing only
-- 65-84:  Good — solid foundation with clear, fixable gaps
-- 40-64:  Fair — needs meaningful rework in several areas
-- 0-39:   Poor — fundamental issues that significantly hurt candidacy
+Focus on CONTENT and WORDING:
+- Clarity, specificity and impact of each line (strong action verbs, concrete outcomes)
+- Quantified achievements ONLY where they naturally fit this field — do not force numbers onto roles that aren't measured that way
+- Relevance and signal — does every line earn its place?
+- Professional tone, grammar and consistency
+- Whether the sections that are standard for THIS field are present and clearly organised
+
+CRITICAL — DO NOT JUDGE TIME OR DATES:
+- You do NOT know today's date. Never reason about what is "current", "future", "expired" or "recent".
+- Never flag dates, tenses, "expected"/in-progress qualifications, employment gaps, or chronology as problems or inconsistencies. Take every date and qualification exactly as written, at face value.
+
+SUGGESTIONS — REAL CHANGES ONLY:
+- Only raise an improvement when it is a GENUINE, meaningful upgrade. Never invent problems to fill a quota. Returning just 2-3 improvements (or fewer) is good when that is all that honestly applies.
+- Every improvement MUST quote the candidate's OWN words and show a concrete, stronger rewrite of those exact words. Never give generic or templated advice (e.g. "use an achievement-focused summary") unless you also rewrite their actual line to demonstrate it.
+- If a section is already strong, do NOT rewrite it — acknowledge it in strengths instead.
+
+TONE:
+- Be honest but genuinely encouraging and constructive. Lead with what works. Frame every suggestion as a way to get even better, never as a failing. Never be harsh or discouraging.
+
+SCORING (encouraging but honest):
+- 85-100: Excellent — polished and compelling, minor refinements only
+- 70-84:  Strong — a solid resume with a few clear opportunities
+- 50-69:  Developing — a good base that needs some meaningful work
+- 0-49:   Needs work — significant, fundamental issues
+Most genuine, complete resumes land between 60 and 85. Reserve scores under 50 for resumes with serious fundamental problems — not for a decent resume that just needs polish.
 
 Return ONLY a valid JSON object — no markdown, no explanation, no extra text. The JSON must have exactly these keys:
 
 {{
   "overall_score": <integer 0-100>,
-  "summary": "<1-2 sentence holistic assessment of the resume's current state and biggest opportunity>",
+  "summary": "<1-2 sentences: an honest, encouraging read of this specific resume's current state and its single biggest opportunity>",
   "strengths": [
-    "<Specific strength. Reference actual resume content. Max 1 sentence.>",
+    "<A specific strength, referencing actual resume content. Max 1 sentence.>",
     "...(up to 6 total)"
   ],
   "improvements": [
     {{
-      "area": "<Short section or topic, e.g. 'Work Experience', 'Skills Section', 'Professional Summary'>",
-      "issue": "<Concise description of the problem — max 1 sentence>",
-      "example_rewrite": "<Show a before → after rewrite using actual or representative text from the resume>"
+      "area": "<The section or topic, e.g. 'Work Experience', 'Skills', 'Summary'>",
+      "issue": "<One sentence on the opportunity — constructive, never harsh>",
+      "example_rewrite": "Before: <the candidate's ACTUAL wording, quoted verbatim from the resume> After: <a concrete, stronger rewrite of that exact line>"
     }},
-    "...(up to 10 total)"
+    "...(only as many as genuinely apply, up to 8)"
   ],
   "missing_elements": [
-    "<Short label for something absent, e.g. 'Professional Summary', 'Quantified Achievements', 'LinkedIn URL'>",
-    "...(up to 8 total)"
+    "<Only something genuinely absent AND expected for THIS person's field. No generic filler. Use an empty array if nothing important is missing.>"
   ],
   "ats_tips": [
-    "<Specific, actionable ATS tip — max 1 sentence>",
-    "...(up to 6 total)"
+    "<A specific tip grounded in THIS resume's wording or formatting. No boilerplate. Use an empty array if it is already clean.>"
   ]
 }}
 
 Rules:
 - improvements must be objects with exactly the keys: area, issue, example_rewrite.
+- example_rewrite MUST start with "Before:" and contain "After:", quoting the candidate's real text in the Before half.
 - strengths, missing_elements, and ats_tips must be plain strings — not objects.
-- Be specific: reference actual content from the resume, not generic advice.
-- Be honest: an 85+ score should be rare and truly deserved.
+- Do not comment on dates, time, or chronology anywhere in the output.
+- Ground everything in this resume's actual content — never generic advice.
 - Return ONLY the JSON object. No other text.
 """
 

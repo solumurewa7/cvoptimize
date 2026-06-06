@@ -35,9 +35,9 @@ def _badge(score: int) -> str:
 # ---------------------------------------------------------------------------
 
 _PROMPT_TEMPLATE = """
-You are an expert recruiter and career coach. Your job is to evaluate how well a candidate's resume matches a specific job description.
+You are an expert recruiter who evaluates candidates fairly across every industry — healthcare, education, trades, retail, finance, creative, tech and more. Your job is to assess how well a candidate's resume matches a specific job description.
 
-Read the following two documents carefully and completely — do not skim.
+Read both documents carefully and completely — do not skim.
 
 === JOB DESCRIPTION ===
 {jd_text}
@@ -45,33 +45,43 @@ Read the following two documents carefully and completely — do not skim.
 === RESUME ===
 {resume_text}
 
-=== TASK ===
-Analyse the match between this resume and job description. Consider:
-- Explicit technical skills mentioned in the JD
-- Implied skills and experience that the role needs (even if not stated as hard requirements)
+=== HOW TO EVALUATE ===
+Judge the match objectively and by the norms of the role's own field (a nursing role against healthcare experience, a teaching role against education experience, and so on — never impose conventions from an unrelated field). Consider:
+- Explicit skills and requirements stated in the JD
+- Implied skills and experience the role needs, even if not stated as hard requirements
 - Relevant work experience, projects, and education
-- Soft skills, teamwork, communication if mentioned in the JD
-- Experience level (junior/mid/senior) and whether the candidate fits
-- DO NOT penalise for skills that are implied or demonstrated indirectly in the resume
+- Soft skills (teamwork, communication, leadership) where the JD calls for them
+- Whether the candidate's experience level fits the role
+- DO NOT penalise for skills that are clearly implied or demonstrated indirectly in the resume.
+
+CRITICAL — DO NOT JUDGE TIME OR DATES:
+- You do NOT know today's date. Never reason about what is "current", "future", "expired" or "recent".
+- Never treat dates, tenses, "expected"/in-progress qualifications, employment gaps, or chronology as a gap, problem or inconsistency. Take every date and qualification exactly as written, at face value.
+
+GAPS — keep them real and constructive:
+- A "gap" is ONLY a skill or area of experience the JD genuinely requires that the resume does not evidence. Frame it constructively, as something the candidate could add or highlight.
+- Never list dates, formatting, chronology, or assumptions as gaps.
+
+Be honest about the fit score — it is a real signal for the candidate, so do not inflate it.
 
 Scoring guide:
 - 90-100: Near-perfect fit. Candidate has almost everything required.
 - 70-89:  Strong fit. Candidate has most key requirements with minor gaps.
 - 40-69:  Partial fit. Candidate has some relevant experience but notable gaps.
-- 0-39:   Poor fit. Significant missing requirements.
+- 0-39:   Limited fit. Significant missing requirements.
 
 Return ONLY a valid JSON object — no markdown, no explanation, no extra text. The JSON must have exactly these keys:
 
 {{
   "fit_score": <integer 0-100>,
-  "job_title": "<Short job title extracted or inferred from the JD, e.g. 'Senior Software Engineer', 'Marketing Manager'. Even if not stated explicitly, infer a reasonable title. Max 60 characters.>",
+  "job_title": "<Short job title extracted or inferred from the JD, e.g. 'Senior Software Engineer', 'Registered Nurse', 'Marketing Manager'. Even if not stated explicitly, infer a reasonable title. Max 60 characters.>",
   "company": "<Company name extracted from the JD, e.g. 'Google', 'Accenture'. Return null (not a string) if no company is mentioned or identifiable.>",
   "strengths": [
     "<Specific bullet. Reference actual resume content AND the JD requirement it satisfies. Max 2 sentences.>",
     "...(up to 10 total)"
   ],
   "gaps": [
-    "<Specific bullet. Name the exact JD requirement and explain why the resume does not satisfy it. Max 2 sentences.>",
+    "<A skill or experience the JD genuinely needs that the resume does not show, framed constructively. Max 2 sentences. Never about dates, time, or formatting.>",
     "...(up to 10 total)"
   ],
   "matched_skills": ["<concise skill name>", "..."],
@@ -82,6 +92,7 @@ Rules:
 - strengths and gaps must each be plain strings — not objects.
 - matched_skills and missing_skills must be short (1-4 words each), suitable for UI chip labels.
 - Do not repeat the same point in both strengths and gaps.
+- Do not comment on dates, time, or chronology anywhere in the output.
 - Be honest and precise. A 90+ score should be rare and truly deserved.
 - Limit strengths to a maximum of 10 items. Limit gaps to a maximum of 10 items.
 - Return ONLY the JSON object. No other text.

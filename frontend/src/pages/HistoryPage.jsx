@@ -125,7 +125,7 @@ function HistoryRow({ analysis: a, delay, onClick }) {
             borderRadius: '999px', padding: '1px 8px',
             fontSize: '0.68rem', fontWeight: 600,
           }}>
-            {a.fit_badge}
+            {a.fit_badge === 'Low' ? 'Limited' : a.fit_badge}
           </span>
         </div>
         {a.jd_snippet && (
