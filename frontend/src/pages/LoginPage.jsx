@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext'
 import { motion } from 'framer-motion'
 import toast from 'react-hot-toast'
 import SEO from '../components/SEO'
+import PasswordInput from '../components/PasswordInput'
 
 export default function LoginPage() {
   const { login } = useAuth()
@@ -125,9 +126,7 @@ export default function LoginPage() {
                   Forgot password?
                 </Link>
               </div>
-              <input
-                className="cv-input"
-                type="password"
+              <PasswordInput
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 onFocus={() => setFocused('password')}

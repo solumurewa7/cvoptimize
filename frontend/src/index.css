@@ -116,7 +116,7 @@ img {
 }
 .cv-input::placeholder {
   color: var(--text-secondary);
-  opacity: 0.6;
+  opacity: 0.75;
 }
 .cv-input:focus {
   border-color: var(--accent);
@@ -169,7 +169,7 @@ img {
   background: transparent;
   color: var(--text-secondary);
   border: 1px solid var(--navy-700);
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 7px 16px;
   font-size: 0.875rem;
   font-weight: 500;

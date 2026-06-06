@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext'
 import { motion } from 'framer-motion'
 import toast from 'react-hot-toast'
 import SEO from '../components/SEO'
+import PasswordInput from '../components/PasswordInput'
 
 export default function RegisterPage() {
   const { register } = useAuth()
@@ -134,9 +135,7 @@ export default function RegisterPage() {
             </FieldGroup>
 
             <FieldGroup label="Password" focused={focused === 'password'}>
-              <input
-                className="cv-input"
-                type="password"
+              <PasswordInput
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 onFocus={() => setFocused('password')}

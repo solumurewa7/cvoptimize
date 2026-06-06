@@ -174,6 +174,14 @@ export default function Navbar() {
           </div>
         )}
 
+        {/* ── Desktop centre nav (guests) — surface the tools while browsing ── */}
+        {!isMobile && !user && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <NavLink to="/analyze">Job Match</NavLink>
+            <NavLink to="/improve">Improve CV</NavLink>
+          </div>
+        )}
+
         {/* ── Desktop right side ── */}
         {!isMobile && (
           user ? (

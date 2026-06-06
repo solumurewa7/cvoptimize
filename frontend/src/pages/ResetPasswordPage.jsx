@@ -6,6 +6,7 @@ import { motion } from 'framer-motion'
 import toast from 'react-hot-toast'
 import client from '../api/client'
 import SEO from '../components/SEO'
+import PasswordInput from '../components/PasswordInput'
 
 export default function ResetPasswordPage() {
   const navigate       = useNavigate()
@@ -116,9 +117,7 @@ export default function ResetPasswordPage() {
               <label className="cv-label" style={{ color: focused === 'pw' ? 'var(--accent)' : undefined, transition: 'color 0.15s' }}>
                 New password
               </label>
-              <input
-                className="cv-input"
-                type="password"
+              <PasswordInput
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 onFocus={() => setFocused('pw')}
@@ -133,9 +132,7 @@ export default function ResetPasswordPage() {
               <label className="cv-label" style={{ color: focused === 'cf' ? 'var(--accent)' : undefined, transition: 'color 0.15s' }}>
                 Confirm password
               </label>
-              <input
-                className="cv-input"
-                type="password"
+              <PasswordInput
                 value={confirm}
                 onChange={e => setConfirm(e.target.value)}
                 onFocus={() => setFocused('cf')}
