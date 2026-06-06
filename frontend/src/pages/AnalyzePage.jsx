@@ -12,9 +12,18 @@ import client from '../api/client'
 import Navbar from '../components/Navbar'
 import SEO from '../components/SEO'
 import AnalysisResult from '../components/AnalysisResult'
+import AnalysisProgress from '../components/AnalysisProgress'
 import { useAuth } from '../context/AuthContext'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { RESUME_COLORS } from '../utils/resumeColors'
+
+const ANALYZE_MESSAGES = [
+  'Reading your resume…',
+  'Scanning the job description…',
+  'Matching skills and experience…',
+  'Scoring your fit…',
+  'Almost there…',
+]
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 export default function AnalyzePage() {
@@ -338,21 +347,16 @@ export default function AnalyzePage() {
                   </>
                 )}
               </button>
-              {analysing && (
-                <motion.p
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', margin: 0 }}
-                >
-                  Loading AI models on first run — ~5 seconds…
-                </motion.p>
-              )}
               {jdText.trim().length > 0 && jdText.trim().length < 50 && !analysing && (
                 <span style={{ color: 'var(--warning)', fontSize: '0.82rem' }}>
                   Paste a longer job description for accurate results
                 </span>
               )}
             </div>
+
+            <AnimatePresence>
+              {analysing && <AnalysisProgress key="analyze-progress" messages={ANALYZE_MESSAGES} />}
+            </AnimatePresence>
           </StepCard>
 
           {/* ── Step 3: Results ─────────────────────────────────────────── */}

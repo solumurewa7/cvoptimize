@@ -14,11 +14,20 @@ import client from '../api/client'
 import Navbar from '../components/Navbar'
 import SEO from '../components/SEO'
 import ScoreRing from '../components/ScoreRing'
+import AnalysisProgress from '../components/AnalysisProgress'
 import { useAuth } from '../context/AuthContext'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { RESUME_COLORS } from '../utils/resumeColors'
 
 const EASE = [0.22, 1, 0.36, 1]
+
+const IMPROVE_MESSAGES = [
+  'Reading your resume…',
+  'Reviewing structure and wording…',
+  'Finding improvement opportunities…',
+  'Writing suggestions…',
+  'Almost there…',
+]
 
 export default function ImproverPage() {
   const { user }    = useAuth()
@@ -305,6 +314,16 @@ export default function ImproverPage() {
             )}
           </button>
           <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+
+          <AnimatePresence>
+            {analysing && (
+              <AnalysisProgress
+                key="improve-progress"
+                messages={IMPROVE_MESSAGES}
+                style={{ maxWidth: '360px', margin: '0 auto' }}
+              />
+            )}
+          </AnimatePresence>
         </motion.div>
 
         {/* ── Results ── */}
