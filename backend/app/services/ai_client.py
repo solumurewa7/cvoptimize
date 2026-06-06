@@ -31,6 +31,12 @@ MODEL = "gemini-2.5-flash"
 _MAX_ATTEMPTS = 2              # 1 initial try + 1 retry
 _BACKOFF_SECONDS = (2,)        # wait before the retry
 _REQUEST_TIMEOUT_MS = 60_000   # hard cap so a hung call can't block a worker forever
+# Low temperature → the grader gives near-identical scores for the same input
+# instead of swinging run-to-run. Keep a touch above 0 to avoid degenerate output.
+_TEMPERATURE = 0.2
+# Fixed seed → best-effort reproducibility, so the same resume scores the same
+# on re-runs (Gemini Flash is otherwise non-deterministic even at temperature 0).
+_SEED = 7
 
 
 # ---------------------------------------------------------------------------
@@ -102,9 +108,12 @@ def _is_transient(exc: Exception) -> bool:
 # Public API
 # ---------------------------------------------------------------------------
 
-def generate(prompt: str) -> str:
+def generate(prompt: str, temperature: float = _TEMPERATURE) -> str:
     """
     Send a prompt to Gemini and return the raw text response.
+
+    `temperature` controls run-to-run variability — lower = steadier/more
+    deterministic (use ~0 for scoring that must be repeatable).
 
     Retries transient failures with exponential backoff. Raises:
         AIRateLimitError — provider is rate-limiting / out of quota
@@ -118,7 +127,11 @@ def generate(prompt: str) -> str:
             response = client.models.generate_content(
                 model=MODEL,
                 contents=prompt,
-                config={"http_options": {"timeout": _REQUEST_TIMEOUT_MS}},
+                config={
+                    "temperature": temperature,
+                    "seed": _SEED,
+                    "http_options": {"timeout": _REQUEST_TIMEOUT_MS},
+                },
             )
             text = (response.text or "").strip()
             if not text:

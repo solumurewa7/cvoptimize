@@ -64,6 +64,11 @@ GAPS — keep them real and constructive:
 
 Be honest about the fit score — it is a real signal for the candidate, so do not inflate it.
 
+HOW TO SCORE (keep it consistent and avoid all-or-nothing):
+- Base the fit_score primarily on the SHARE of the role's important requirements that the resume clearly evidences, giving partial credit for relevant or transferable experience.
+- A single missing qualification or requirement should LOWER the score, never collapse it, when the candidate clearly has the core relevant experience.
+- Weigh the whole picture rather than fixating on one missing item, so the same resume and JD always land on a similar score.
+
 Scoring guide:
 - 90-100: Near-perfect fit. Candidate has almost everything required.
 - 70-89:  Strong fit. Candidate has most key requirements with minor gaps.
@@ -126,8 +131,9 @@ def run_analysis(resume_text: str, jd_text: str) -> dict:
         resume_text=resume_text.strip(),
     )
 
+    # temperature=0 → the fit score is stable/repeatable for the same resume + JD.
     # Calls Gemini with retry/backoff; raises AIRateLimitError / AIServiceError.
-    raw = generate(prompt)
+    raw = generate(prompt, temperature=0.0)
 
     # Strip any accidental markdown code fences Gemini sometimes adds
     raw = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.MULTILINE)
