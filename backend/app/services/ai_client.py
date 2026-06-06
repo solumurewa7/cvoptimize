@@ -25,8 +25,11 @@ logger = logging.getLogger(__name__)
 MODEL = "gemini-2.5-flash"
 
 # Retry tuning for transient failures (rate limit / temporary server errors).
-_MAX_ATTEMPTS = 3              # 1 initial try + 2 retries
-_BACKOFF_SECONDS = (1, 2)      # wait before retry 2 and retry 3
+# Kept conservative so the worst-case total (≈2×60s + backoff) stays inside the
+# gunicorn worker timeout (see backend/gunicorn.conf.py) — otherwise a retry
+# sequence could get the worker killed and surface as a misleading CORS error.
+_MAX_ATTEMPTS = 2              # 1 initial try + 1 retry
+_BACKOFF_SECONDS = (2,)        # wait before the retry
 _REQUEST_TIMEOUT_MS = 60_000   # hard cap so a hung call can't block a worker forever
 
 
