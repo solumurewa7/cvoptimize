@@ -14,28 +14,10 @@
 #       - ats_tips       (keyword/formatting tips for ATS scanners)
 #   3. We validate, coerce, and return the result dict.
 
-import os
 import json
 import re
 
-from google import genai
-
-# ---------------------------------------------------------------------------
-# Lazy client loading (shared pattern with analyzer.py)
-# ---------------------------------------------------------------------------
-_client = None
-
-
-def _get_client():
-    global _client
-    if _client is None:
-        api_key = os.environ.get("GEMINI_API_KEY")
-        if not api_key:
-            raise EnvironmentError(
-                "GEMINI_API_KEY is not set. Add it to backend/.env and restart Flask."
-            )
-        _client = genai.Client(api_key=api_key)
-    return _client
+from .ai_client import generate, AIServiceError
 
 
 # ---------------------------------------------------------------------------
@@ -133,18 +115,10 @@ def run_improvement(resume_text: str) -> dict:
             "ats_tips": list[str],
         }
     """
-    client = _get_client()
-
     prompt = _PROMPT_TEMPLATE.format(resume_text=resume_text.strip())
 
-    try:
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt,
-        )
-        raw = response.text.strip()
-    except Exception as e:
-        raise RuntimeError(f"Gemini API call failed: {e}") from e
+    # Calls Gemini with retry/backoff; raises AIRateLimitError / AIServiceError.
+    raw = generate(prompt)
 
     # Strip any accidental markdown code fences
     raw = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.MULTILINE)
@@ -154,9 +128,8 @@ def run_improvement(resume_text: str) -> dict:
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as e:
-        raise RuntimeError(
-            f"Gemini returned non-JSON output. Raw response:\n{raw[:500]}"
-        ) from e
+        # Don't leak the raw model output to the caller — log-friendly message only.
+        raise AIServiceError("Gemini returned malformed output") from e
 
     # Validate and coerce fields
     score = int(data.get("overall_score", 0))

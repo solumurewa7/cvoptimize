@@ -59,9 +59,11 @@ class Config:
     # back as a header on state-changing requests (POST, DELETE, etc.).
     JWT_COOKIE_CSRF_PROTECT = True
 
-    # SendGrid (email sending) settings
-    SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "")
-    SENDGRID_FROM_EMAIL = os.environ.get("SENDGRID_FROM_EMAIL", "noreply@cvooptimize.com")
+    # Resend (email sending) settings.
+    # EMAIL_FROM must be on a domain authenticated in Resend (cvoptimize.site)
+    # so DKIM/SPF/DMARC pass and mail reaches the inbox instead of spam.
+    RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
+    EMAIL_FROM = os.environ.get("EMAIL_FROM", "no-reply@cvoptimize.site")
 
     # The URL of your frontend app — used to build verification email links
     FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")

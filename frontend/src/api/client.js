@@ -35,4 +35,31 @@ client.interceptors.request.use(config => {
   return config
 })
 
+// Safety net: a backend error message is only safe to show to the user if it's a
+// short, plain string. Anything else (a raw JSON blob, a stack trace, an HTML
+// error page) must never be dumped into a toast or the UI — show a generic line
+// instead. The backend already returns clean messages; this is defence in depth.
+function isCleanMessage(s) {
+  if (typeof s !== 'string') return false
+  const t = s.trim()
+  if (!t || t.length > 300) return false
+  if (t.startsWith('{') || t.startsWith('[') || t.startsWith('<')) return false
+  if (t.includes('Traceback')) return false
+  return true
+}
+
+// Response interceptor: sanitise `error.response.data.error` in place so the
+// existing `err.response?.data?.error || '...'` pattern across the app always
+// gets a safe value.
+client.interceptors.response.use(
+  response => response,
+  error => {
+    const data = error?.response?.data
+    if (data && typeof data === 'object' && 'error' in data && !isCleanMessage(data.error)) {
+      data.error = 'Something went wrong. Please try again.'
+    }
+    return Promise.reject(error)
+  },
+)
+
 export default client

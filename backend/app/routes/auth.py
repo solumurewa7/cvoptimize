@@ -82,7 +82,9 @@ def register():
         verify_url = f"{frontend_url}/verify-email?token={token}"
         send_verification_email(user.email, verify_url)
     except Exception:
-        pass
+        # Non-fatal: don't fail registration, but log so deliverability
+        # problems are visible in the server logs.
+        current_app.logger.exception("Failed to send verification email on register")
 
     # --- Issue JWT and set cookies ---
     access_token = create_access_token(identity=str(user.id))
@@ -198,7 +200,8 @@ def forgot_password():
         try:
             send_password_reset_email(user.email, reset_url)
         except Exception:
-            pass  # Don't expose email errors to the client
+            # Don't expose email errors to the client, but log them.
+            current_app.logger.exception("Failed to send password reset email")
 
     return jsonify({"message": "If that email is registered, a reset link has been sent."}), 200
 
@@ -340,6 +343,6 @@ def resend_verification():
         verify_url   = f"{frontend_url}/verify-email?token={token}"
         send_verification_email(user.email, verify_url)
     except Exception:
-        pass
+        current_app.logger.exception("Failed to resend verification email")
 
     return jsonify({"message": "Verification email sent — check your inbox"}), 200

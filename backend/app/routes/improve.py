@@ -6,15 +6,20 @@
 #   POST /api/improve         — analyse a saved resume (auth required); result stored in resume.improvement_findings
 #   POST /api/improve/guest   — analyse an uploaded file without auth; result not saved
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from flask_limiter.util import get_remote_address
 
 from ..extensions import db, limiter
 from ..models import Resume
 from ..services.improver import run_improvement
+from ..services.ai_client import AIRateLimitError
 
 improve_bp = Blueprint("improve_bp", __name__)
+
+# Friendly, code-free messages shown to users when the AI step fails.
+_AI_BUSY_MSG = "Our AI is busy right now — please wait a minute and try again."
+_AI_DOWN_MSG = "We couldn't analyse your resume right now. Please try again shortly."
 
 
 # ---------------------------------------------------------------------------
@@ -53,8 +58,11 @@ def improve_resume():
 
     try:
         result = run_improvement(resume.extracted_text)
-    except Exception as e:
-        return jsonify({"error": f"Improvement analysis failed: {str(e)}"}), 500
+    except AIRateLimitError:
+        return jsonify({"error": _AI_BUSY_MSG}), 429
+    except Exception:
+        current_app.logger.exception("Improvement analysis failed")
+        return jsonify({"error": _AI_DOWN_MSG}), 503
 
     # Persist the result so the user can see it again without re-running
     resume.improvement_findings = result
@@ -99,8 +107,11 @@ def improve_guest():
 
     try:
         result = run_improvement(resume_text)
-    except Exception as e:
-        return jsonify({"error": f"Improvement analysis failed: {str(e)}"}), 500
+    except AIRateLimitError:
+        return jsonify({"error": _AI_BUSY_MSG}), 429
+    except Exception:
+        current_app.logger.exception("Guest improvement analysis failed")
+        return jsonify({"error": _AI_DOWN_MSG}), 503
 
     result["word_count"] = count_words(resume_text)
     return jsonify({"improvement": result}), 200

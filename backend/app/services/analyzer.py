@@ -12,28 +12,10 @@
 #       - missing_skills  (concise skill tag strings absent from the resume)
 #   3. We derive fit_badge from the score and return the full result dict.
 
-import os
 import json
 import re
 
-from google import genai
-
-# ---------------------------------------------------------------------------
-# Lazy client loading
-# ---------------------------------------------------------------------------
-_client = None
-
-
-def _get_client():
-    global _client
-    if _client is None:
-        api_key = os.environ.get("GEMINI_API_KEY")
-        if not api_key:
-            raise EnvironmentError(
-                "GEMINI_API_KEY is not set. Add it to backend/.env and restart Flask."
-            )
-        _client = genai.Client(api_key=api_key)
-    return _client
+from .ai_client import generate, AIServiceError
 
 
 # ---------------------------------------------------------------------------
@@ -128,21 +110,13 @@ def run_analysis(resume_text: str, jd_text: str) -> dict:
             "semantic_matches": [],
         }
     """
-    client = _get_client()
-
     prompt = _PROMPT_TEMPLATE.format(
         jd_text=jd_text.strip(),
         resume_text=resume_text.strip(),
     )
 
-    try:
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt,
-        )
-        raw = response.text.strip()
-    except Exception as e:
-        raise RuntimeError(f"Gemini API call failed: {e}") from e
+    # Calls Gemini with retry/backoff; raises AIRateLimitError / AIServiceError.
+    raw = generate(prompt)
 
     # Strip any accidental markdown code fences Gemini sometimes adds
     raw = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.MULTILINE)
@@ -152,9 +126,8 @@ def run_analysis(resume_text: str, jd_text: str) -> dict:
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as e:
-        raise RuntimeError(
-            f"Gemini returned non-JSON output. Raw response:\n{raw[:500]}"
-        ) from e
+        # Don't leak the raw model output to the caller — log-friendly message only.
+        raise AIServiceError("Gemini returned malformed output") from e
 
     # Validate and coerce fields
     score = int(data.get("fit_score", 0))

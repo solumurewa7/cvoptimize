@@ -38,3 +38,6 @@ Thumbs.db
 /jd.json
 /login.json
 /cookies.txt
+
+# === Migration scripts (contain DB credentials) ===
+backend/migrate_to_neon.py

@@ -1,14 +1,28 @@
-# services/email.py — transactional email via SendGrid
+# services/email.py — transactional email via Resend
+#
+# We send from an authenticated domain (cvoptimize.site) so DKIM/SPF/DMARC pass
+# and verification / reset mail lands in the inbox instead of spam.
 
 import os
-from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail
+import resend
+
+
+def _from_email() -> str:
+    return os.environ.get("EMAIL_FROM", "no-reply@cvoptimize.site")
+
+
+def _send(to_email: str, subject: str, html: str) -> None:
+    """Send one transactional email via Resend. Raises on failure."""
+    resend.api_key = os.environ["RESEND_API_KEY"]
+    resend.Emails.send({
+        "from": _from_email(),
+        "to": [to_email],
+        "subject": subject,
+        "html": html,
+    })
 
 
 def send_password_reset_email(to_email: str, reset_url: str) -> None:
-    api_key    = os.environ["SENDGRID_API_KEY"]
-    from_email = os.environ["SENDGRID_FROM_EMAIL"]
-
     html = f"""
 <!DOCTYPE html>
 <html>
@@ -79,20 +93,10 @@ def send_password_reset_email(to_email: str, reset_url: str) -> None:
 </html>
 """
 
-    message = Mail(
-        from_email=from_email,
-        to_emails=to_email,
-        subject="Reset your CVOptimize password",
-        html_content=html,
-    )
-    sg = SendGridAPIClient(api_key)
-    sg.send(message)
+    _send(to_email, "Reset your CVOptimize password", html)
 
 
 def send_verification_email(to_email: str, verify_url: str) -> None:
-    api_key    = os.environ["SENDGRID_API_KEY"]
-    from_email = os.environ["SENDGRID_FROM_EMAIL"]
-
     html = f"""
 <!DOCTYPE html>
 <html>
@@ -162,11 +166,4 @@ def send_verification_email(to_email: str, verify_url: str) -> None:
 </html>
 """
 
-    message = Mail(
-        from_email=from_email,
-        to_emails=to_email,
-        subject="Verify your CVOptimize email",
-        html_content=html,
-    )
-    sg = SendGridAPIClient(api_key)
-    sg.send(message)
+    _send(to_email, "Verify your CVOptimize email", html)

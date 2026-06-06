@@ -15,7 +15,7 @@ Live at: **https://cvoptimize.site**
 | Backend | Flask, Flask-JWT-Extended, Flask-Migrate, Flask-Limiter, Flask-CORS |
 | Database | PostgreSQL (Supabase) via SQLAlchemy |
 | AI | Google Gemini Flash (`google-genai`) |
-| Email | SendGrid |
+| Email | Resend (authenticated domain: cvoptimize.site) |
 | Hosting | Render (backend Web Service + frontend Static Site) |
 | Domain | Namecheap — cvoptimize.site |
 
@@ -105,7 +105,7 @@ Auto-deploys on push to `main`.
 - `DATABASE_URL` = Supabase PostgreSQL connection string
 - `JWT_SECRET_KEY`, `SECRET_KEY`
 - `GEMINI_API_KEY`
-- `SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL`
+- `RESEND_API_KEY`, `EMAIL_FROM` (= `no-reply@cvoptimize.site`)
 - `FRONTEND_URL` = `https://cvoptimize.site`
 
 **Frontend:**
@@ -128,7 +128,8 @@ Auto-deploys on push to `main`.
 - **SameSite=None** — required because frontend and backend are cross-origin in production.
 - **CORS** — hardcoded in `backend/app/__init__.py`: Render URLs + `https://cvoptimize.site` + `https://www.cvoptimize.site` + `FRONTEND_URL` env var.
 - **Resume files** — stored as LargeBinary in PostgreSQL (no object storage). Streamed via `send_file` inline.
-- **Gemini** — `from google import genai`, model `gemini-2.5-flash`, structured JSON prompt.
+- **Gemini** — `from google import genai`, model `gemini-2.5-flash`, structured JSON prompt. All calls go through `backend/app/services/ai_client.py` (`generate()`), which retries transient failures and raises typed `AIRateLimitError` / `AIServiceError`. Routes map these to clean 429/503 messages — raw exceptions are never returned to the client.
+- **Email** — `backend/app/services/email.py` sends via Resend from `EMAIL_FROM` (authenticated domain `cvoptimize.site`). Email send failures are logged (not silently swallowed) but never block auth flows.
 
 ---
 
@@ -141,5 +142,7 @@ Branch: `main`
 
 ## Pending / Future Work
 
-- **SPF/DKIM/DMARC** — email deliverability records on cvoptimize.site (now that domain is owned)
-- **Slim requirements.txt** — remove unused torch, spacy, sentence-transformers to speed up deploys
+- **Resend domain auth (DNS)** — add Resend's DKIM/SPF/DMARC records for cvoptimize.site in Namecheap and verify in Resend before relying on email.
+- **Render Starter plan** — upgrade backend to always-on to remove cold-start login failures.
+- **Enable paid Gemini billing** — pay-as-you-go on the GEMINI_API_KEY project to remove free-tier 429s.
+- ~~Slim requirements.txt~~ — already slim (no torch/spacy/sentence-transformers present).

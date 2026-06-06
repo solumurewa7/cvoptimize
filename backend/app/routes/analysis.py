@@ -10,15 +10,20 @@
 
 from datetime import datetime, timezone, timedelta
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from flask_limiter.util import get_remote_address
 
 from ..extensions import db, limiter
 from ..models import Resume, Analysis
 from ..services.analyzer import run_analysis
+from ..services.ai_client import AIRateLimitError
 
 analysis_bp = Blueprint("analysis_bp", __name__)
+
+# Friendly, code-free messages shown to users when the AI step fails.
+_AI_BUSY_MSG = "Our AI is busy right now — please wait a minute and try again."
+_AI_DOWN_MSG = "We couldn't analyse your resume right now. Please try again shortly."
 
 
 # ---------------------------------------------------------------------------
@@ -76,8 +81,11 @@ def create_analysis():
     # This is the slow step (~1-3 seconds on first call while models load).
     try:
         result = run_analysis(resume.extracted_text, jd_text)
-    except Exception as e:
-        return jsonify({"error": f"Analysis failed: {str(e)}"}), 500
+    except AIRateLimitError:
+        return jsonify({"error": _AI_BUSY_MSG}), 429
+    except Exception:
+        current_app.logger.exception("Analysis failed")
+        return jsonify({"error": _AI_DOWN_MSG}), 503
 
     # --- Save to database ---
     analysis = Analysis(
@@ -223,8 +231,11 @@ def analyze_guest():
 
     try:
         result = run_analysis(resume_text, jd_text)
-    except Exception as e:
-        return jsonify({"error": f"Analysis failed: {str(e)}"}), 500
+    except AIRateLimitError:
+        return jsonify({"error": _AI_BUSY_MSG}), 429
+    except Exception:
+        current_app.logger.exception("Guest analysis failed")
+        return jsonify({"error": _AI_DOWN_MSG}), 503
 
     result["word_count"] = count_words(resume_text)
     return jsonify({"analysis": result}), 200
